@@ -1,0 +1,21 @@
+# DeepSeek Harness 配置。使用时复制为 Workspace 根目录的 workflow.config.yaml。
+schemaVersion: 1
+harness: deepseek-harness
+modelGateway:
+  type: opencodex
+  # OCX 仍是 Pi 的启动前置条件，但不会作为 DeepSeek Harness 的模型 provider。
+  required: true
+  installIfMissing: true
+
+# DeepSeek Harness 只使用自身的 DeepSeek provider，不读取 ZCode 中的 OCX 代理模型。
+roles:
+  planner:
+    model: deepseek-official/deepseek-flash
+  executor:
+    model: deepseek-official/deepseek-flash
+  admin:
+    model: deepseek-official/deepseek-flash
+
+executors:
+  ui:
+    model: deepseek-official/deepseek-flash

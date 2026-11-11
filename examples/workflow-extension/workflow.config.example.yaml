@@ -1,0 +1,25 @@
+# ZCode 配置。使用时放在 Workspace 根目录，文件名为 workflow.config.yaml。
+schemaVersion: 1
+# 只接桌面端。zcode 和 deepseek-harness 均指能操作可见浏览器的桌面宿主。
+harness: zcode
+modelGateway:
+  type: opencodex
+  # 必须为 true。Pi 派单前会运行 ocx status --json；未安装、未启动或健康检查失败均停止任务。
+  required: true
+  installIfMissing: true
+
+# ZCode 的 model 填 OCX 单模型 ID 或已有组合的公开 ID。Pi 会在 ZCode 自身的模型配置中
+# 查找对应 provider/model，并在创建会话时选择或切换，不依赖 ZCode 当前默认值。
+# 本例默认走 OpenCode(Chat)，ui 覆盖为 CommandCode(Chat)。
+roles:
+  planner:
+    model: gpt-6-luna
+  executor:
+    model: opencode-go/deepseek-v4.1-flash
+  admin:
+    model: gpt-6-luna
+
+# 可选。Planner 指定 ui 时改用 CommandCode(Chat)，省略执行人选时使用 roles.executor。
+executors:
+  ui:
+    model: command-code/deepseek-deepseek-v4.1-flash

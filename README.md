@@ -10,7 +10,19 @@
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-# Pi
+# Smart-WorkFlow-Agent
+
+> Fork lineage: [earendil-works/pi](https://github.com/earendil-works/pi). This repository remains a GitHub fork and keeps the upstream commit history intact.
+
+本 fork 增加 Pi 对 ZCode 和 DeepSeek Harness 桌面端的受控协作入口。Pi 在任务开始前检查本机 OCX 已安装、代理已启动且健康；ZCode 根据 Workspace 配置从自身模型配置中选择 OCX 代理模型，DeepSeek Harness 只使用自身的 DeepSeek provider。
+
+- [实施与验收方案](docs/local-harness-collaboration-plan.md)
+- [2026-11-11/12 实机验收记录](docs/local-harness-collaboration-acceptance-2026-11-11.md)
+- [工作流包说明](packages/workflow-agent/README.md)
+
+![ZCode 中配置 OpenCode(Chat) 与 CommandCode(Chat) 的模型选择界面](packages/workflow-agent/docs/images/zcode-ocx-model-switch.png)
+
+## Upstream Pi
 
 Pi is a minimal, extensible agent harness that you can make your own.
 
@@ -82,6 +94,7 @@ This monorepo contains the Pi CLI and its supporting libraries.
 | **[@earendil-works/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
 | **[@earendil-works/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI |
 | **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
+| **[@earendil-works/pi-workflow-agent](packages/workflow-agent)** | Governed ZCode and DeepSeek Harness desktop workflow orchestration |
 
 For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
 

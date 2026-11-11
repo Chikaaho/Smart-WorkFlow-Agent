@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>P0 筛选后翻页验收页</title>
+		<style>
+			:root {
+				font-family:
+					Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+				color: #172033;
+				background: #f4f6fa;
+			}
+			body {
+				margin: 0;
+				padding: 48px 24px;
+			}
+			main {
+				max-width: 880px;
+				margin: 0 auto;
+				padding: 32px;
+				background: white;
+				border: 1px solid #dfe4ee;
+				border-radius: 16px;
+				box-shadow: 0 16px 40px rgb(23 32 51 / 8%);
+			}
+			h1 {
+				margin: 0 0 8px;
+				font-size: 28px;
+			}
+			p {
+				margin: 0 0 24px;
+				color: #586174;
+			}
+			.controls,
+			.pagination {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			}
+			.controls {
+				margin-bottom: 20px;
+			}
+			select,
+			button {
+				min-height: 40px;
+				padding: 0 14px;
+				border: 1px solid #c5ccda;
+				border-radius: 8px;
+				background: white;
+				font: inherit;
+			}
+			button:not(:disabled) {
+				cursor: pointer;
+			}
+			button:disabled {
+				color: #9aa2b1;
+			}
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				margin-bottom: 20px;
+			}
+			th,
+			td {
+				padding: 12px 14px;
+				border-bottom: 1px solid #e5e9f1;
+				text-align: left;
+			}
+			th {
+				background: #f7f8fb;
+				font-weight: 600;
+			}
+			.status {
+				margin-left: auto;
+				color: #45506a;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>审批列表</h1>
+			<p>选择部门后翻到第二页，列表必须继续使用同一部门筛选。</p>
+
+			<div class="controls">
+				<label for="department">部门</label>
+				<select id="department" data-testid="department-filter">
+					<option value="all">全部部门</option>
+					<option value="财务部">财务部</option>
+					<option value="研发部">研发部</option>
+					<option value="人事部">人事部</option>
+				</select>
+				<span id="filter-status" class="status" aria-live="polite"></span>
+			</div>
+
+			<table>
+				<thead>
+					<tr>
+						<th>编号</th>
+						<th>申请人</th>
+						<th>部门</th>
+						<th>事项</th>
+					</tr>
+				</thead>
+				<tbody id="approval-rows" data-testid="approval-rows"></tbody>
+			</table>
+
+			<div class="pagination">
+				<button id="previous-page" type="button" data-testid="previous-page">上一页</button>
+				<span id="page-status" aria-live="polite" data-testid="page-status"></span>
+				<button id="next-page" type="button" data-testid="next-page">下一页</button>
+			</div>
+		</main>
+
+		<script>
+			const approvals = [
+				["AP-101", "林青", "财务部", "差旅报销"],
+				["AP-102", "周宁", "研发部", "软件采购"],
+				["AP-103", "赵安", "人事部", "培训申请"],
+				["AP-104", "陈予", "财务部", "付款申请"],
+				["AP-105", "王澄", "研发部", "设备领用"],
+				["AP-106", "何简", "人事部", "招聘申请"],
+				["AP-107", "许文", "财务部", "预算调整"],
+				["AP-108", "沈一", "研发部", "云资源续费"],
+				["AP-109", "叶岚", "人事部", "入职审批"],
+				["AP-110", "韩星", "财务部", "发票开具"],
+				["AP-111", "唐果", "研发部", "测试账号"],
+				["AP-112", "陆川", "人事部", "转正申请"],
+				["AP-113", "秦川", "财务部", "费用预提"],
+				["AP-114", "苏木", "研发部", "代码仓权限"],
+				["AP-115", "顾言", "人事部", "调岗申请"],
+				["AP-116", "江月", "财务部", "合同付款"],
+				["AP-117", "夏至", "研发部", "发布审批"],
+				["AP-118", "宋河", "人事部", "离职交接"],
+			];
+
+			const pageSize = 3;
+			let page = 1;
+			const department = document.querySelector("#department");
+			const rows = document.querySelector("#approval-rows");
+			const filterStatus = document.querySelector("#filter-status");
+			const pageStatus = document.querySelector("#page-status");
+			const previousPage = document.querySelector("#previous-page");
+			const nextPage = document.querySelector("#next-page");
+
+			function render() {
+				const selected = department.value;
+				const filtered = approvals.filter(
+					([, , itemDepartment]) => selected === "all" || itemDepartment === selected,
+				);
+				const pageCount = Math.ceil(filtered.length / pageSize);
+				const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+				rows.replaceChildren(
+					...visible.map((approval) => {
+						const row = document.createElement("tr");
+						row.dataset.department = approval[2];
+						row.replaceChildren(
+							...approval.map((value) => {
+								const cell = document.createElement("td");
+								cell.textContent = value;
+								return cell;
+							}),
+						);
+						return row;
+					}),
+				);
+				filterStatus.textContent = `当前筛选：${department.selectedOptions[0].textContent}`;
+				pageStatus.textContent = `第 ${page} / ${pageCount} 页，共 ${filtered.length} 条`;
+				previousPage.disabled = page === 1;
+				nextPage.disabled = page === pageCount;
+			}
+
+			department.addEventListener("change", () => {
+				page = 1;
+				render();
+			});
+			previousPage.addEventListener("click", () => {
+				page -= 1;
+				render();
+			});
+			nextPage.addEventListener("click", () => {
+				page += 1;
+				render();
+			});
+
+			render();
+		</script>
+	</body>
+</html>
