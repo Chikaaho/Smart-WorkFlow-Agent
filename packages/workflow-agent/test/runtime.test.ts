@@ -120,6 +120,7 @@ describe("PersistentWorkflowRuntime", () => {
 			readiness,
 		});
 		const checkpoints: Array<{ attemptsInRound: number; totalAttempts: number }> = [];
+		const progress: string[] = [];
 		const result = await runtime.runUntilAccepted(
 			{
 				requirement: { id: "large-task", goal: "完成大任务", acceptance: ["全部验收项通过"] },
@@ -127,6 +128,9 @@ describe("PersistentWorkflowRuntime", () => {
 				maxAttempts: 2,
 			},
 			{
+				onProgress: (event) => {
+					progress.push(event.type);
+				},
 				onLimitReached: async (checkpoint) => {
 					checkpoints.push({
 						attemptsInRound: checkpoint.attemptsInRound,
@@ -142,6 +146,10 @@ describe("PersistentWorkflowRuntime", () => {
 			{ attemptsInRound: 2, totalAttempts: 2 },
 			{ attemptsInRound: 2, totalAttempts: 4 },
 		]);
+		expect(progress.filter((type) => type === "executor_dispatching")).toHaveLength(5);
+		expect(progress.filter((type) => type === "planner_reviewed")).toHaveLength(5);
+		expect(progress.filter((type) => type === "limit_reached")).toHaveLength(2);
+		expect(progress.at(-1)).toBe("accepted");
 		await runtime.close();
 	});
 

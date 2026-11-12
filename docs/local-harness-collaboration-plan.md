@@ -1,6 +1,6 @@
 # 桌面 Harness 协同开发入口 · 实施与验收方案
 
-2026-11-11。本文是新开发会话的起点。实现仓库为 `Smart-WorkFlow-Agent` 的 `main`（本次核对为 `d0aa218c`）。治理依据为 `Smart-WorkFlow-Agent-Workspace` 的远端 `main`（`19c94125`）。两个分支均已与远端核对。当前交付包括本方案、[配置示例](../examples/workflow-extension/workflow.config.example.yaml)和[接入调研](desktop-harness-model-capabilities-research.md)。协同入口、配置加载器和两款桌面适配器均待开发。
+2026-11-11 建立方案，2026-11-12 完成通用入口。实现仓库为 `Smart-WorkFlow-Agent` 的 `main`，治理依据为 `Smart-WorkFlow-Agent-Workspace` 的 `main`。当前实现包括[通用 Pi 入口](../examples/workflow-extension/smart-workflow.ts)、[配置示例](../examples/workflow-extension/workflow.config.example.yaml)、OCX 与角色模型门禁、ZCode / DeepSeek Harness 适配、Planner / Executor 循环、可见浏览器验收、运行记录恢复、状态同步及 Git 提交推送验收。
 
 ## 一、用户操作与完成条件
 

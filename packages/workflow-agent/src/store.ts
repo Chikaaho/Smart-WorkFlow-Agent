@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type FileHandle, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { type FileHandle, mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { WorkflowSnapshot } from "./workflow.ts";
 
@@ -8,6 +8,11 @@ export interface StoredWorkflowRuntime {
 	workspace: string;
 	savedAt: number;
 	snapshot: WorkflowSnapshot;
+}
+
+export interface StoredWorkflowRun {
+	id: string;
+	runtime: StoredWorkflowRuntime;
 }
 
 export class WorkflowRuntimeStore {
@@ -64,6 +69,31 @@ export class WorkflowRuntimeStore {
 		}
 		if (!isStoredRuntime(value)) throw new Error(`工作流运行记录格式无效：${id}`);
 		return value;
+	}
+
+	async list(workspace?: string): Promise<StoredWorkflowRun[]> {
+		let names: string[];
+		try {
+			names = await readdir(join(this.directory, "runs"));
+		} catch (error) {
+			if (isErrorCode(error, "ENOENT")) return [];
+			throw new Error("无法读取工作流运行记录目录", { cause: error });
+		}
+		const runs: StoredWorkflowRun[] = [];
+		for (const name of names) {
+			if (!name.endsWith(".json")) continue;
+			const id = name.slice(0, -".json".length);
+			if (!/^[A-Za-z0-9_-]+$/u.test(id)) continue;
+			const runtime = await this.load(id);
+			if (runtime && (!workspace || runtime.workspace === workspace)) runs.push({ id, runtime });
+		}
+		return runs.toSorted((left, right) => right.runtime.savedAt - left.runtime.savedAt);
+	}
+
+	async latestActive(workspace: string): Promise<StoredWorkflowRun | undefined> {
+		return (await this.list(workspace)).find(
+			(run) => run.runtime.snapshot.phase !== "accepted" && run.runtime.snapshot.phase !== "cancelled",
+		);
 	}
 
 	async release(): Promise<void> {

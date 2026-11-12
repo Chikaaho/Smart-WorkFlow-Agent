@@ -54,4 +54,31 @@ describe("WorkflowRuntimeStore", () => {
 		await expect(store.acquire()).resolves.toBeUndefined();
 		await store.release();
 	});
+
+	it("finds the newest unfinished workflow for the current Workspace", async () => {
+		const store = await createStore();
+		await store.acquire();
+		for (const [id, phase, savedAt] of [
+			["completed", "accepted", 300],
+			["older-active", "confirmed", 100],
+			["latest-active", "pending_review", 200],
+		] as const) {
+			await store.save(id, {
+				schemaVersion: 1,
+				workspace: "/workspace",
+				savedAt,
+				snapshot: {
+					phase,
+					requirement: { id, revision: 1, goal: id, acceptance: ["通过"] },
+					attempts: [],
+					reviews: [],
+				},
+			});
+		}
+		expect(await store.latestActive("/workspace")).toMatchObject({
+			id: "latest-active",
+			runtime: { snapshot: { phase: "pending_review" } },
+		});
+		await store.release();
+	});
 });

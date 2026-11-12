@@ -25,6 +25,7 @@ const binding: DeepSeekModelBinding = {
 const input: DispatchInput = {
 	taskId: "filter:r1:a1",
 	role: "executor",
+	stage: "execution",
 	requirement: {
 		id: "filter",
 		revision: 1,
@@ -37,6 +38,7 @@ const input: DispatchInput = {
 
 class FakeDriver implements DeepSeekDesktopDriver {
 	prepared?: DeepSeekModelBinding;
+	request?: DeepSeekDesktopRequest & { sessionId: string };
 	selected: DeepSeekModelBinding = binding;
 
 	async prepare(request: Pick<DeepSeekDesktopRequest, "workspacePath" | "model">) {
@@ -45,6 +47,7 @@ class FakeDriver implements DeepSeekDesktopDriver {
 	}
 
 	async run(request: DeepSeekDesktopRequest & { sessionId: string }): Promise<DeepSeekDesktopResult> {
+		this.request = request;
 		return {
 			marker: request.resultMarker,
 			output: `${request.resultMarker} {"page":"2 / 2"}`,
@@ -80,5 +83,18 @@ describe("DeepSeekDesktopAdapter", () => {
 		});
 		const prepared = await adapter.prepare(input);
 		await expect(adapter.dispatch(input, prepared)).rejects.toThrow("实际模型与派单绑定不一致");
+	});
+
+	it("requires the complete plan JSON in the planning result marker", async () => {
+		const driver = new FakeDriver();
+		const adapter = new DeepSeekDesktopAdapter({
+			workspacePath: "/workspace",
+			driver,
+			resolveModelBinding: async () => binding,
+			requiredToolPrefix: "mcp__chrome-devtools-mcp__",
+		});
+		const prepared = await adapter.prepare({ ...input, role: "planner", stage: "planning" });
+		await adapter.dispatch({ ...input, role: "planner", stage: "planning" }, prepared);
+		expect(driver.request?.prompt).toContain("标记后的 JSON 必须是完整规划，不能换成状态摘要");
 	});
 });

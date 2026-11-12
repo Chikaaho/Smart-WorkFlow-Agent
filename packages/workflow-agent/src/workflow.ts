@@ -25,6 +25,7 @@ export interface RequirementAuthorization {
 export interface DispatchInput {
 	taskId: string;
 	role: "executor" | "planner";
+	stage: "planning" | "execution" | "review";
 	requirement: RequirementDraft;
 	executorName?: string;
 	model: ResolvedRoute;
@@ -207,6 +208,7 @@ export class WorkflowCoordinator {
 		const dispatchInput: DispatchInput = {
 			taskId,
 			role: "executor",
+			stage: "execution",
 			requirement,
 			...(input.executorName ? { executorName: input.executorName } : {}),
 			model,
@@ -280,6 +282,7 @@ export class WorkflowCoordinator {
 		const dispatchInput: DispatchInput = {
 			taskId: reviewId,
 			role: "planner",
+			stage: "review",
 			requirement,
 			model,
 			prompt: buildPlannerPrompt(requirement, attempt, additionalInstructions),

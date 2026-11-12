@@ -81,6 +81,14 @@ export {
 	type WorkflowRouteResult,
 } from "./ocx.ts";
 export {
+	GIT_DELIVERY_ACCEPTANCE,
+	parseWorkflowTaskPlan,
+	planWorkflowTask,
+	WORKFLOW_STATE_SYNC_ACCEPTANCE,
+	type WorkflowTaskPlan,
+	type WorkflowTaskPlanningInput,
+} from "./planner.ts";
+export {
 	formatWorkflowLimitReached,
 	MAX_WORKFLOW_ATTEMPTS,
 	PersistentWorkflowRuntime,
@@ -89,10 +97,12 @@ export {
 	type WorkflowCancelledResult,
 	type WorkflowContinuationController,
 	type WorkflowLimitReachedResult,
+	type WorkflowProgressEvent,
 	type WorkflowRunInput,
 	type WorkflowRunResult,
 } from "./runtime.ts";
 export {
+	type StoredWorkflowRun,
 	type StoredWorkflowRuntime,
 	WorkflowRuntimeStore,
 } from "./store.ts";

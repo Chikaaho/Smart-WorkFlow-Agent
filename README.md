@@ -1,6 +1,6 @@
 # Smart-WorkFlow-Agent
 
-Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。用户在 Pi 中确认需求，运行时按配置选择 ZCode 或 DeepSeek Harness，分别调用 Executor 和 Planner 模型，在可见浏览器中执行任务、读取证据、逐项验收并继续派单。
+Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。启动后检查 OCX、ZCode、DeepSeek Harness、Chrome、角色模型和 Workspace 治理；用户在 Pi 中提交任务，Planner 规划并确认后自动派给 Executor，在可见浏览器中执行、逐项验收、同步状态、提交并推送代码，直到通过或需要用户决策。
 
 项目由两部分组成：
 
@@ -166,7 +166,7 @@ executors:
 ```bash
 cd "$TARGET_WORKSPACE"
 "$AGENT_REPO/pi-test.sh" \
-  --extension "$AGENT_REPO/examples/workflow-extension/zcode-protocol-workflow.ts"
+  --extension "$AGENT_REPO/examples/workflow-extension/smart-workflow.ts"
 ```
 
 Windows PowerShell：
@@ -174,22 +174,28 @@ Windows PowerShell：
 ```powershell
 Set-Location $env:TARGET_WORKSPACE
 & "$env:AGENT_REPO\pi-test.ps1" `
-  --extension "$env:AGENT_REPO\examples\workflow-extension\zcode-protocol-workflow.ts"
+  --extension "$env:AGENT_REPO\examples\workflow-extension\smart-workflow.ts"
 ```
 
-进入 Pi 后，使用默认模型运行：
+进入 Pi 后先查看安装、账号、模型和治理状态：
 
 ```text
-/workflow-p1-zcode
+/workflow-setup
 ```
 
-使用 CommandCode(Chat) 的 DeepSeek 运行：
+开始通用任务：
 
 ```text
-/workflow-p1-zcode ui
+/workflow
 ```
 
-Pi 会检查 OCX，读取配置，在 ZCode 中选择 Executor 模型并执行任务。Executor 返回后，Pi 会再创建使用 `roles.planner` 模型的 ZCode 会话，独立读取当前页面并逐项验收。未通过时，Planner 的修复要求会直接成为下一次 Executor 派单。
+需要指定具名 Executor 时把配置名作为参数，例如使用 CommandCode(Chat) 的 `ui`：
+
+```text
+/workflow ui
+```
+
+Pi 会让你输入任务，使用 `roles.planner` 生成目标、验收条件和 Executor 派单。确认规划后自动执行；Planner 退回时继续修复。任务产生仓库变更时，状态同步、提交和推送属于验收条件。
 
 ### 4. 单独测试模型切换（macOS）
 
@@ -289,7 +295,7 @@ executors:
 ```bash
 cd "$TARGET_WORKSPACE"
 "$AGENT_REPO/pi-test.sh" \
-  --extension "$AGENT_REPO/examples/workflow-extension/deepseek-protocol-workflow.ts"
+  --extension "$AGENT_REPO/examples/workflow-extension/smart-workflow.ts"
 ```
 
 Windows PowerShell：
@@ -297,19 +303,20 @@ Windows PowerShell：
 ```powershell
 Set-Location $env:TARGET_WORKSPACE
 & "$env:AGENT_REPO\pi-test.ps1" `
-  --extension "$env:AGENT_REPO\examples\workflow-extension\deepseek-protocol-workflow.ts"
+  --extension "$env:AGENT_REPO\examples\workflow-extension\smart-workflow.ts"
 ```
 
 进入 Pi 后运行：
 
 ```text
-/workflow-p3-deepseek
+/workflow-setup
+/workflow
 ```
 
-或：
+使用具名 Executor：
 
 ```text
-/workflow-p3-deepseek ui
+/workflow ui
 ```
 
 DeepSeek Harness 会打开可见 Chromium。Executor 完成页面操作后，Planner 会通过同一套浏览器插件独立验收；未通过时自动继续派单，每轮最多 60 次。额度用完后，Pi 会显示累计派单、最近一次 Planner 结论和未通过项，再询问是否继续。
@@ -342,7 +349,14 @@ http://127.0.0.1:4173/p0-filter-pagination-demo.html
 
 ### 2. 运行任务
 
-使用前面的 ZCode 或 DeepSeek Harness 启动命令，然后在 Pi 中运行对应命令。
+通用入口使用 `/workflow`。需要单独复测仓库内置场景时，改为加载对应的示例扩展：
+
+```bash
+"$AGENT_REPO/pi-test.sh" \
+  --extension "$AGENT_REPO/examples/workflow-extension/zcode-protocol-workflow.ts"
+```
+
+或加载 `deepseek-protocol-workflow.ts`，再运行 `/workflow-p1-zcode [executor-name]` 或 `/workflow-p3-deepseek [executor-name]`。
 
 macOS 的 ZCode 桌面 Browser Use 探针还可以直接运行：
 
@@ -376,24 +390,24 @@ Pi 返回的内容应包含：
 
 ## 一次任务会怎么运行
 
-1. 你在 Pi 中运行 ZCode 或 DeepSeek Harness 命令。
-2. Pi 检查 OCX、配置文件和本机应用，并恢复 `.workflow/runtime` 中已有的运行记录。
-3. Executor 在可见浏览器中执行操作并返回回执。
-4. Workspace Supervisor 检查治理事件和回执是否允许进入业务验收。
-5. Pi 使用 `roles.planner` 配置的模型创建独立 Planner 会话；Planner 必须读取当前页面，逐项给出证据。
-6. 任一条件未通过时，Planner 生成下一张 Executor 派单，运行时继续执行；每轮默认和最高上限均为 60 次。
-7. 本轮额度用完后，Pi 汇报累计派单、Planner 结论和未通过项。选择继续后输入 1–60 的新增轮数；新额度用完时再次汇报并询问。
-8. 全部条件通过后任务进入 `accepted`；用户选择终止时进入 `cancelled`。每次派单、暂停、恢复和验收结果都会写入本地运行记录。
+1. Pi 启动后检查 OCX、Chrome、ZCode、DeepSeek Harness、`workflow.config.yaml`、三种角色模型和 Workspace `main` 治理目录。
+2. 运行 `/workflow`。如果存在未完成记录，先恢复或终止；否则输入新任务。
+3. Planner 读取项目事实，生成目标、验收条件、具名 Executor 和完整派单。你确认后才开始执行；修改任务会重新规划。
+4. Executor 在项目目录完成实现和验证，Workspace Supervisor 检查回执能否进入业务验收。
+5. Planner 独立读取工程和页面行为证据，逐项验收。退回意见自动成为下一次 Executor 派单。
+6. 每轮默认和最高上限为 60 次。额度用完后，Pi 汇报累计派单、Planner 结论和未通过项；选择继续后输入 1–60 的新增轮数。
+7. 验收通过前，Executor 按 Workspace `main` 同步后续状态、验收回执和终态；产生仓库变更时提交本任务文件并推送当前远端分支。
+8. Planner 核对状态同步、提交、推送和工作树结果。全部通过后保存并显示 `accepted`；用户终止时保存 `cancelled`。
 
 你可以随时切到浏览器或桌面应用查看过程，也可以暂停后接管。
 
 ## 当前可用范围
 
 - macOS：ZCode 模型切换、DeepSeek 原生模型、可见浏览器、任务退回、暂停和恢复已完成实机验证。
-- 运行时：Executor 与 Planner 使用各自配置的模型；Planner 逐项验收并自动退回，运行记录支持恢复和单写入锁。
+- 运行时：启动体检、通用任务规划确认、Executor / Planner 自动循环、轮次续跑、状态同步、Git 提交推送验收、未完成任务恢复和单写入锁已接入统一入口。
 - Windows：已实现 PowerShell 启动、Chrome/ZCode/DeepSeek Harness 默认安装目录发现和自定义目录覆盖；仍需在 Windows 实机完成同一套“筛选后翻页”验收。
 - DeepSeek Harness 独立接入 Workspace 规则仓库的初始化登记仍待完成。
-- 当前命令主要用于跑通仓库内置验收示例；接入实际项目时，需要按业务任务修改需求和验收项。
+- `/workflow-p1-zcode` 和 `/workflow-p3-deepseek` 保留为固定验收示例；实际项目使用 `/workflow`。
 
 ## 常见问题
 
@@ -434,6 +448,7 @@ macOS 用 `export`，Windows PowerShell 用 `$env:变量名 = "路径"` 设置�
 | `SMART_WORKFLOW_DEEPSEEK_INSTALL_DIR` | 包含 `DeepSeek Harness.exe` 的安装目录，或 macOS `.app` 路径 |
 | `SMART_WORKFLOW_DEEPSEEK_EXECUTABLE` | DeepSeek Harness 可执行文件完整路径 |
 | `SMART_WORKFLOW_DEEPSEEK_RESOURCES` | DeepSeek Harness 的 `resources` 目录 |
+| `SMART_WORKFLOW_HARNESS_TIMEOUT_MS` | 单次 Planner、Executor 或验收等待时间，默认 `900000`（15 分钟），最小 `60000` |
 
 ### DeepSeek Harness 没有浏览器工具
 
@@ -460,10 +475,11 @@ python3 -m http.server 4173
 ```bash
 npm --prefix packages/workflow-agent test
 npx tsc -p packages/workflow-agent/tsconfig.build.json --noEmit
+npx tsc -p examples/workflow-extension/tsconfig.json
 npm run check:pinned-deps
 ```
 
-当前工作流包有 10 个测试文件、39 个测试。完整设计和验收记录：
+当前工作流包有 11 个测试文件、45 个测试。完整设计和验收记录：
 
 - [实施方案](docs/local-harness-collaboration-plan.md)
 - [实机验收记录](docs/local-harness-collaboration-acceptance-2026-11-11.md)

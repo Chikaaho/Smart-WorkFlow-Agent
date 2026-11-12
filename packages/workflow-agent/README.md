@@ -10,6 +10,7 @@ Pi 的桌面 Harness 工作流核心。它提供：
 - ZCode app-server 协议适配，由 ZCode 选择浏览器动作，Pi 提供用户可见的 Chrome；
 - DeepSeek Desktop Host 协议适配，由 DeepSeek 会话调用 Chrome DevTools MCP 操作可见 Chromium。
 - macOS / Windows 的 Chrome、ZCode 和 DeepSeek Harness 安装目录发现，以及自定义路径覆盖。
+- 通用 Planner 任务规划、用户确认、未完成任务恢复、进度事件、状态同步与 Git 提交推送验收。
 
 角色权限、Supervisor / Validator 事件和业务验收流程读取自 [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) 的 `main` 分支。
 
@@ -21,6 +22,7 @@ Pi 在每次 Executor 和 Planner 派单前执行 `ocx status --json`。CLI 缺�
 
 ## 已验证入口
 
+- `examples/workflow-extension/smart-workflow.ts`：`/workflow-setup`、`/workflow [executor-name]`
 - `examples/workflow-extension/zcode-protocol-workflow.ts`：`/workflow-p1-zcode [executor-name]`
 - `examples/workflow-extension/deepseek-protocol-workflow.ts`：`/workflow-p3-deepseek [executor-name]`
 - `examples/workflow-extension/zcode-desktop-control.ts`：ZCode 模型选择器切换与回读探针
@@ -35,8 +37,9 @@ Windows 默认查找当前用户和 `Program Files` 下的标准安装目录。�
 - `SMART_WORKFLOW_DEEPSEEK_INSTALL_DIR`
 - `SMART_WORKFLOW_DEEPSEEK_EXECUTABLE`
 - `SMART_WORKFLOW_DEEPSEEK_RESOURCES`
+- `SMART_WORKFLOW_HARNESS_TIMEOUT_MS`：通用 Pi 入口的单次 Harness 等待时间，默认 15 分钟。
 
-ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。命令的可选参数是 `executors` 中的配置名，例如 `/workflow-p1-zcode ui`。
+ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。实际项目运行 `/workflow`；命令的可选参数是 `executors` 中的配置名，例如 `/workflow ui`。Planner 规划会自动加入 Workspace 状态同步和 Git 提交推送验收条件。
 
 ## 实机界面
 

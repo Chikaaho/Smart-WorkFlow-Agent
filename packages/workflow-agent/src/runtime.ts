@@ -56,8 +56,17 @@ export interface WorkflowCancelledResult {
 
 export type WorkflowRunResult = WorkflowAcceptedResult | WorkflowLimitReachedResult | WorkflowCancelledResult;
 
+export type WorkflowProgressEvent =
+	| { type: "executor_dispatching"; attemptNumber: number; prompt: string }
+	| { type: "executor_completed"; attempt: WorkflowAttempt }
+	| { type: "planner_reviewed"; review: PlannerReviewDecision }
+	| { type: "limit_reached"; checkpoint: WorkflowLimitReachedResult }
+	| { type: "accepted"; result: WorkflowAcceptedResult }
+	| { type: "cancelled"; result: WorkflowCancelledResult };
+
 export interface WorkflowContinuationController {
 	onLimitReached(checkpoint: WorkflowLimitReachedResult): Promise<number | undefined>;
+	onProgress?(event: WorkflowProgressEvent): void | Promise<void>;
 }
 
 export class PersistentWorkflowRuntime {
@@ -128,7 +137,11 @@ export class PersistentWorkflowRuntime {
 
 		while (true) {
 			const snapshot = this.coordinator.snapshot();
-			if (snapshot.phase === "accepted") return this.#acceptedResult(snapshot);
+			if (snapshot.phase === "accepted") {
+				const result = this.#acceptedResult(snapshot);
+				await continuation?.onProgress?.({ type: "accepted", result });
+				return result;
+			}
 			if (snapshot.phase === "cancelled") throw new WorkflowStateError("工作流已经取消");
 			if (snapshot.phase === "paused") {
 				if (snapshot.pausedFrom === "executing") {
@@ -141,21 +154,29 @@ export class PersistentWorkflowRuntime {
 				if (snapshot.attempts.length - attemptBaseline >= maxAttempts) {
 					const checkpoint = this.#limitReachedResult(snapshot, snapshot.attempts.length - attemptBaseline);
 					if (!continuation) return checkpoint;
+					await continuation.onProgress?.({ type: "limit_reached", checkpoint });
 					const additionalAttempts = await continuation.onLimitReached(checkpoint);
 					if (additionalAttempts === undefined) {
 						await this.coordinator.cancel();
 						const cancelled = this.coordinator.snapshot();
-						return {
+						const result: WorkflowCancelledResult = {
 							status: "cancelled",
 							snapshot: cancelled,
 							totalAttempts: cancelled.attempts.length,
 						};
+						await continuation.onProgress?.({ type: "cancelled", result });
+						return result;
 					}
 					this.#assertAttemptLimit(additionalAttempts, "新增轮数");
 					attemptBaseline = snapshot.attempts.length;
 					maxAttempts = additionalAttempts;
 					continue;
 				}
+				await continuation?.onProgress?.({
+					type: "executor_dispatching",
+					attemptNumber: snapshot.attempts.length + 1,
+					prompt: nextPrompt,
+				});
 				const attempt = await this.coordinator.dispatch({
 					...(input.executorName ? { executorName: input.executorName } : {}),
 					prompt: nextPrompt,
@@ -163,15 +184,22 @@ export class PersistentWorkflowRuntime {
 				if (!attempt.supervisor.accepted) {
 					throw new WorkflowStateError(`Supervisor 未接受 Executor 回执：${attempt.supervisor.reason}`);
 				}
+				await continuation?.onProgress?.({ type: "executor_completed", attempt });
 				continue;
 			}
 			if (snapshot.phase === "pending_review") {
 				const review = await this.coordinator.reviewWithPlanner(input.plannerInstructions);
+				await continuation?.onProgress?.({ type: "planner_reviewed", review });
 				if (!review.accepted) nextPrompt = review.nextPrompt ?? input.prompt;
 				continue;
 			}
 			throw new WorkflowStateError(`工作流处于无法自动继续的状态：${snapshot.phase}`);
 		}
+	}
+
+	async cancel(): Promise<void> {
+		this.#assertOpen();
+		await this.coordinator.cancel();
 	}
 
 	async close(): Promise<void> {

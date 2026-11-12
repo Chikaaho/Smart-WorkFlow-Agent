@@ -55,12 +55,16 @@ export class ZCodeDesktopAdapter implements DesktopHarnessAdapter {
 	async dispatch(input: DispatchInput, prepared: PreparedDispatch): Promise<ExecutorReceipt> {
 		const marker = `WORKFLOW_${input.taskId.replaceAll(/[^A-Za-z0-9_-]/gu, "_")}`;
 		const roleName = input.role === "planner" ? "规划验收（Planner）" : "执行（Executor）";
+		const completionInstruction =
+			input.stage === "planning"
+				? `完成后仅输出一行：${marker} {"goal":"...","acceptance":["..."],"executorPrompt":"...","executorName":"可选"}。标记后的 JSON 必须是完整规划，不能换成状态摘要。`
+				: `完成后输出以 ${marker} 开头的单行结果。`;
 		const prompt = [
 			`本会话角色：${roleName}。`,
 			`任务 ID：${input.taskId}`,
 			`需求修订：${input.requirement.revision}`,
 			input.prompt,
-			`完成后输出以 ${marker} 开头的单行结果。`,
+			completionInstruction,
 		].join("\n");
 		const model = await this.resolveModelBinding(input.model);
 		const result = await this.driver.run({
@@ -69,7 +73,7 @@ export class ZCodeDesktopAdapter implements DesktopHarnessAdapter {
 			model,
 			prompt,
 			resultMarker: marker,
-			...(this.requireBrowserEvidence ? { requireBrowserEvidence: true } : {}),
+			...(this.requireBrowserEvidence && input.stage !== "planning" ? { requireBrowserEvidence: true } : {}),
 			...(this.timeoutMs === undefined ? {} : { timeoutMs: this.timeoutMs }),
 		});
 		if (result.marker !== marker) throw new Error("ZCode 返回了其他任务的结果标记");

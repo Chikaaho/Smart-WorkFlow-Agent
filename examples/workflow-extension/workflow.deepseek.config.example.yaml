@@ -17,5 +17,6 @@ roles:
     model: deepseek-official/deepseek-flash
 
 executors:
+  # 通用 /workflow 入口会把 Workspace 状态同步、Git 提交和当前远端分支推送加入验收条件。
   ui:
     model: deepseek-official/deepseek-flash
