@@ -197,6 +197,8 @@ Set-Location $env:TARGET_WORKSPACE
 
 Pi 会让你输入任务，使用 `roles.planner` 生成目标、验收条件和 Executor 派单。确认规划后自动执行；Planner 退回时继续修复。任务产生仓库变更时，状态同步、提交和推送属于验收条件。
 
+Pi 创建和恢复 ZCode 会话时会自动选择“完全操控”（`yolo`）。执行过程中不会逐项询问工具权限；任务规划确认和需要用户决策的节点仍会停下来询问。
+
 ### 4. 单独测试模型切换（macOS）
 
 启动模型切换工具：
@@ -320,6 +322,8 @@ Set-Location $env:TARGET_WORKSPACE
 ```
 
 DeepSeek Harness 会打开可见 Chromium。Executor 完成页面操作后，Planner 会通过同一套浏览器插件独立验收；未通过时自动继续派单，每轮最多 60 次。额度用完后，Pi 会显示累计派单、最近一次 Planner 结论和未通过项，再询问是否继续。
+
+Pi 创建 DeepSeek 会话时会自动选择“完全权限”（`danger-full-access`）并回读确认，不会逐项询问工具权限。
 
 ## 跑一遍自带示例
 
@@ -479,7 +483,7 @@ npx tsc -p examples/workflow-extension/tsconfig.json
 npm run check:pinned-deps
 ```
 
-当前工作流包有 11 个测试文件、45 个测试。完整设计和验收记录：
+完整设计和验收记录：
 
 - [实施方案](docs/local-harness-collaboration-plan.md)
 - [实机验收记录](docs/local-harness-collaboration-acceptance-2026-11-11.md)

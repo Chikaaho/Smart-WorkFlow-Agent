@@ -23,6 +23,7 @@ export {
 	type DeepSeekModelBinding,
 } from "./desktop/deepseek.ts";
 export {
+	DEEPSEEK_FULL_ACCESS_PRESET,
 	DeepSeekDesktopHostClient,
 	type DeepSeekDesktopHostOptions,
 	type DeepSeekPreparedSession,
@@ -50,6 +51,7 @@ export {
 	type ZCodeModelBinding,
 } from "./desktop/zcode-model.ts";
 export {
+	ZCODE_FULL_CONTROL_MODE,
 	type ZCodePreparedSession,
 	ZCodeProtocolClient,
 	type ZCodeProtocolClientOptions,

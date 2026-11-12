@@ -6,6 +6,8 @@ import type { ZCodeDesktopDriver, ZCodeDesktopRequest, ZCodeDesktopResult } from
 
 type UnknownRecord = Record<string, unknown>;
 
+export const ZCODE_FULL_CONTROL_MODE = "yolo";
+
 interface PendingRequest {
 	resolve(value: unknown): void;
 	reject(error: Error): void;
@@ -125,7 +127,7 @@ export class ZCodeProtocolClient {
 				workspacePath: this.options.workspacePath,
 				workspaceKey: this.options.workspacePath,
 			},
-			mode: "guarded",
+			mode: ZCODE_FULL_CONTROL_MODE,
 			model: {
 				providerId: model.providerId,
 				modelId: model.modelId,
@@ -149,6 +151,10 @@ export class ZCodeProtocolClient {
 			},
 			thoughtLevel: model.reasoningLevel ?? "max",
 			...(this.options.toolAllowlist ? { toolAllowlist: this.options.toolAllowlist } : {}),
+		});
+		await this.request("session/setMode", {
+			sessionId,
+			mode: ZCODE_FULL_CONTROL_MODE,
 		});
 		return { sessionId, workspacePath: this.options.workspacePath, model };
 	}

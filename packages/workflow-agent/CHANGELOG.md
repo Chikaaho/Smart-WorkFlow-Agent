@@ -13,3 +13,7 @@
 - Added persistent Executor-to-Planner review loops with per-criterion evidence, repair redispatch, and stale writer-lock recovery.
 - Added repeatable 60-attempt checkpoints with Planner failure reports, user-selected continuation counts, and persisted cancellation.
 - Added a general Pi workflow entry with startup diagnostics, Planner task intake and confirmation, active-run recovery, progress reporting, Workspace state synchronization, and Git commit/push acceptance.
+
+### Changed
+
+- Desktop sessions now start with full control: ZCode uses `yolo`, and DeepSeek Harness uses and verifies `danger-full-access`.

@@ -20,6 +20,8 @@ Pi 在每次 Executor 和 Planner 派单前执行 `ocx status --json`。CLI 缺�
 
 模型在派单时绑定。ZCode 的模型 ID 来自 OCX 目录，再映射到 ZCode 自身 `provider_config.json` 中的代理 provider；`OpenCode(Chat)` 和 `CommandCode(Chat)` 可以按配置切换，不依赖当前默认值。DeepSeek Harness 不使用这些 ZCode provider，只接受 `deepseek-official/<model>`，通过 `session/selectModel` 绑定并回读实际 provider、model 和 reasoning effort；回读不一致时拒绝 Executor 回执。
 
+ZCode 新建和恢复会话时使用 `yolo` 完全操控模式。DeepSeek 新建会话时使用 `danger-full-access` 完全权限并回读确认。工具调用不再逐项询问；规划确认和用户决策仍由 Pi 处理。
+
 ## 已验证入口
 
 - `examples/workflow-extension/smart-workflow.ts`：`/workflow-setup`、`/workflow [executor-name]`

@@ -9,6 +9,8 @@ import type {
 
 type UnknownRecord = Record<string, unknown>;
 
+export const DEEPSEEK_FULL_ACCESS_PRESET = "danger-full-access";
+
 export interface DeepSeekDesktopHostOptions {
 	executable: string;
 	entry: string;
@@ -147,6 +149,24 @@ export class DeepSeekDesktopHostClient {
 		});
 		const actualSessionId = isRecord(created) ? readString(created, "sessionId") : undefined;
 		if (!actualSessionId) throw new Error("DeepSeek Harness 建会话结果缺少 sessionId");
+		const permissionCommand = await this.request("commands/execute", {
+			agentId: actualSessionId,
+			line: `/permission ${DEEPSEEK_FULL_ACCESS_PRESET}`,
+			submittedAttachments: [],
+		});
+		const commandResult =
+			isRecord(permissionCommand) && isRecord(permissionCommand.result) ? permissionCommand.result : undefined;
+		if (!commandResult || commandResult.kind !== "success") {
+			throw new Error("DeepSeek Harness 没有启用完全权限");
+		}
+		const projections = await this.request("session/projections", {
+			request: { sessionId: actualSessionId },
+		});
+		const values = isRecord(projections) && isRecord(projections.values) ? projections.values : undefined;
+		const permissions = values && isRecord(values.permissions) ? values.permissions : undefined;
+		if (!permissions || permissions.currentValue !== DEEPSEEK_FULL_ACCESS_PRESET) {
+			throw new Error("DeepSeek Harness 完全权限回读不一致");
+		}
 		const selected = await this.request("session/selectModel", {
 			request: { sessionId: actualSessionId, ...model },
 		});
