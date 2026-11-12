@@ -5,7 +5,7 @@ modelGateway:
   type: opencodex
   # OCX 仍是 Pi 的启动前置条件，但不会作为 DeepSeek Harness 的模型 provider。
   required: true
-  installIfMissing: true
+  installIfMissing: false
 
 # DeepSeek Harness 只使用自身的 DeepSeek provider，不读取 ZCode 中的 OCX 代理模型。
 roles:

@@ -6,7 +6,7 @@ modelGateway:
   type: opencodex
   # 必须为 true。Pi 派单前会运行 ocx status --json；未安装、未启动或健康检查失败均停止任务。
   required: true
-  installIfMissing: true
+  installIfMissing: false
 
 # ZCode 的 model 填 OCX 单模型 ID 或已有组合的公开 ID。Pi 会在 ZCode 自身的模型配置中
 # 查找对应 provider/model，并在创建会话时选择或切换，不依赖 ZCode 当前默认值。

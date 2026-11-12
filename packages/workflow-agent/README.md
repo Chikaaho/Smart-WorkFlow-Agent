@@ -22,9 +22,13 @@ ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.
 
 ## 实机界面
 
-下图是更新后的 ZCode 模型选择界面。`OpenCode(Chat)` 与 `CommandCode(Chat)` 均配置在 ZCode 自身 provider 列表中，Pi 根据工作流配置选择并回读实际模型。
+下图是更新后的 ZCode 模型选择界面；用户名、本机路径、项目与会话内容已经遮盖。`OpenCode(Chat)` 与 `CommandCode(Chat)` 均配置在 ZCode 自身 provider 列表中，Pi 根据工作流配置选择并回读实际模型。
 
 ![ZCode 中的 OCX 代理模型选择](docs/images/zcode-ocx-model-switch.png)
+
+筛选翻页验收通过时，页面保持财务部筛选并显示第二页的 `AP-110`、`AP-113`、`AP-116`：
+
+![筛选后翻页的通过结果](docs/images/filter-pagination-accepted.png)
 
 DeepSeek 的浏览器能力不是桌面版默认项。0.2.2-rc.1 需要在 Desktop profile 中固定安装并显式挂载 `@deepseek-ai/dsh-browser-use` 和 `@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp`，将 provider 配置为 `mode: launch`、`headless: false`。未挂载时，模型不会获得 `mcp__chrome-devtools-mcp__*` 工具；不能把 Bash 或自建 CDP 脚本当作浏览器插件验收。
 

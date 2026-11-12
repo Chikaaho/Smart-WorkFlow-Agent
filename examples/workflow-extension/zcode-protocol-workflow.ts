@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	ChromeCdpBrowser,
@@ -18,7 +19,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 const ZCODE_EXECUTABLE = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs";
 const ZCODE_BUILTIN_PROVIDER_CONFIG =
 	"/Applications/ZCode.app/Contents/Resources/config/provider/zcode-builtin.json";
-const ZCODE_PERSONAL_PROVIDER_CONFIG = "/Users/chikan/.zcode/v2/provider_config.json";
+const ZCODE_PERSONAL_PROVIDER_CONFIG = join(homedir(), ".zcode", "v2", "provider_config.json");
 
 async function runP1(
 	ctx: ExtensionContext,
