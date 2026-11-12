@@ -29,6 +29,14 @@ export {
 	DeepSeekProtocolDriver,
 } from "./desktop/deepseek-protocol.ts";
 export {
+	type DeepSeekInstallationPaths,
+	type DesktopPathLookupOptions,
+	resolveChromeExecutable,
+	resolveDeepSeekInstallation,
+	resolveZCodeInstallation,
+	type ZCodeInstallationPaths,
+} from "./desktop/platform-paths.ts";
+export {
 	ZCodeDesktopAdapter,
 	type ZCodeDesktopDriver,
 	type ZCodeDesktopRequest,
@@ -73,6 +81,18 @@ export {
 	type WorkflowRouteResult,
 } from "./ocx.ts";
 export {
+	formatWorkflowLimitReached,
+	MAX_WORKFLOW_ATTEMPTS,
+	PersistentWorkflowRuntime,
+	type PersistentWorkflowRuntimeOptions,
+	type WorkflowAcceptedResult,
+	type WorkflowCancelledResult,
+	type WorkflowContinuationController,
+	type WorkflowLimitReachedResult,
+	type WorkflowRunInput,
+	type WorkflowRunResult,
+} from "./runtime.ts";
+export {
 	type StoredWorkflowRuntime,
 	WorkflowRuntimeStore,
 } from "./store.ts";
@@ -80,7 +100,10 @@ export {
 	type DesktopHarnessAdapter,
 	type DispatchInput,
 	type ExecutorReceipt,
+	type PlannerCriterionDecision,
+	type PlannerReviewDecision,
 	type PreparedDispatch,
+	parsePlannerReview,
 	type RequirementAuthorization,
 	type RequirementDraft,
 	type SupervisorDecision,

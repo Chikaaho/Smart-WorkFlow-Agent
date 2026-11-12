@@ -7,6 +7,7 @@ export interface ZCodeDesktopRequest {
 	model: ZCodeModelBinding;
 	prompt: string;
 	resultMarker: string;
+	requireBrowserEvidence?: boolean;
 	timeoutMs?: number;
 }
 
@@ -30,17 +31,20 @@ export class ZCodeDesktopAdapter implements DesktopHarnessAdapter {
 	readonly driver: ZCodeDesktopDriver;
 	readonly resolveModelBinding: (route: ResolvedRoute) => Promise<ZCodeModelBinding>;
 	readonly timeoutMs?: number;
+	readonly requireBrowserEvidence: boolean;
 
 	constructor(options: {
 		workspacePath: string;
 		driver: ZCodeDesktopDriver;
 		resolveModelBinding: (route: ResolvedRoute) => Promise<ZCodeModelBinding>;
 		timeoutMs?: number;
+		requireBrowserEvidence?: boolean;
 	}) {
 		this.workspacePath = options.workspacePath;
 		this.driver = options.driver;
 		this.resolveModelBinding = options.resolveModelBinding;
 		this.timeoutMs = options.timeoutMs;
+		this.requireBrowserEvidence = options.requireBrowserEvidence ?? false;
 	}
 
 	async prepare(input: DispatchInput): Promise<PreparedDispatch> {
@@ -50,8 +54,9 @@ export class ZCodeDesktopAdapter implements DesktopHarnessAdapter {
 
 	async dispatch(input: DispatchInput, prepared: PreparedDispatch): Promise<ExecutorReceipt> {
 		const marker = `WORKFLOW_${input.taskId.replaceAll(/[^A-Za-z0-9_-]/gu, "_")}`;
+		const roleName = input.role === "planner" ? "规划验收（Planner）" : "执行（Executor）";
 		const prompt = [
-			"本会话角色：执行（Executor）。",
+			`本会话角色：${roleName}。`,
 			`任务 ID：${input.taskId}`,
 			`需求修订：${input.requirement.revision}`,
 			input.prompt,
@@ -64,6 +69,7 @@ export class ZCodeDesktopAdapter implements DesktopHarnessAdapter {
 			model,
 			prompt,
 			resultMarker: marker,
+			...(this.requireBrowserEvidence ? { requireBrowserEvidence: true } : {}),
 			...(this.timeoutMs === undefined ? {} : { timeoutMs: this.timeoutMs }),
 		});
 		if (result.marker !== marker) throw new Error("ZCode 返回了其他任务的结果标记");

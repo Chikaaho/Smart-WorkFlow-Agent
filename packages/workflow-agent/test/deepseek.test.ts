@@ -24,6 +24,7 @@ const binding: DeepSeekModelBinding = {
 
 const input: DispatchInput = {
 	taskId: "filter:r1:a1",
+	role: "executor",
 	requirement: {
 		id: "filter",
 		revision: 1,

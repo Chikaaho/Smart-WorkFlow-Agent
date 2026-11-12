@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveChromeExecutable } from "./platform-paths.ts";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -449,7 +450,7 @@ export class ChromeCdpBrowser implements VisibleBrowserProvider {
 
 	async #ensureStarted(): Promise<void> {
 		if (this.#socket) return;
-		const executable = this.options.executable ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+		const executable = this.options.executable ?? (await resolveChromeExecutable());
 		const profileDir = await mkdtemp(join(tmpdir(), "pi-workflow-chrome-"));
 		const child = spawn(
 			executable,

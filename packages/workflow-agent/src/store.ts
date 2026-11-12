@@ -22,11 +22,18 @@ export class WorkflowRuntimeStore {
 		if (this.#lock) return;
 		await mkdir(this.directory, { recursive: true });
 		const lockPath = join(this.directory, "writer.lock");
-		try {
-			this.#lock = await open(lockPath, "wx");
-			await this.#lock.writeFile(`${process.pid}\n`, "utf8");
-		} catch (error) {
-			throw new Error(`Workspace 已有工作流调度进程：${lockPath}`, { cause: error });
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			try {
+				this.#lock = await open(lockPath, "wx");
+				await this.#lock.writeFile(`${process.pid}\n`, "utf8");
+				return;
+			} catch (error) {
+				if (attempt === 0 && isErrorCode(error, "EEXIST") && !(await lockOwnerIsAlive(lockPath))) {
+					await rm(lockPath, { force: true });
+					continue;
+				}
+				throw new Error(`Workspace 已有工作流调度进程：${lockPath}`, { cause: error });
+			}
 		}
 	}
 
@@ -52,7 +59,7 @@ export class WorkflowRuntimeStore {
 		try {
 			value = JSON.parse(await readFile(this.#path(id), "utf8"));
 		} catch (error) {
-			if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+			if (isErrorCode(error, "ENOENT")) return undefined;
 			throw new Error(`无法读取工作流运行记录：${id}`, { cause: error });
 		}
 		if (!isStoredRuntime(value)) throw new Error(`工作流运行记录格式无效：${id}`);
@@ -72,15 +79,47 @@ export class WorkflowRuntimeStore {
 	}
 }
 
+function isErrorCode(error: unknown, code: string): boolean {
+	return error instanceof Error && "code" in error && error.code === code;
+}
+
+async function lockOwnerIsAlive(lockPath: string): Promise<boolean> {
+	let pid: number;
+	try {
+		pid = Number.parseInt((await readFile(lockPath, "utf8")).trim(), 10);
+	} catch {
+		return false;
+	}
+	if (!Number.isInteger(pid) || pid < 1) return false;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return isErrorCode(error, "EPERM");
+	}
+}
+
 function isStoredRuntime(value: unknown): value is StoredWorkflowRuntime {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 	const record = value as Record<string, unknown>;
+	const snapshot = record.snapshot;
 	return (
 		record.schemaVersion === 1 &&
 		typeof record.workspace === "string" &&
 		typeof record.savedAt === "number" &&
-		typeof record.snapshot === "object" &&
-		record.snapshot !== null &&
-		!Array.isArray(record.snapshot)
+		typeof snapshot === "object" &&
+		snapshot !== null &&
+		!Array.isArray(snapshot) &&
+		isWorkflowSnapshotRecord(snapshot as Record<string, unknown>)
+	);
+}
+
+function isWorkflowSnapshotRecord(snapshot: Record<string, unknown>): boolean {
+	const phases = new Set(["draft", "confirmed", "executing", "pending_review", "accepted", "paused", "cancelled"]);
+	return (
+		typeof snapshot.phase === "string" &&
+		phases.has(snapshot.phase) &&
+		Array.isArray(snapshot.attempts) &&
+		(snapshot.reviews === undefined || Array.isArray(snapshot.reviews))
 	);
 }

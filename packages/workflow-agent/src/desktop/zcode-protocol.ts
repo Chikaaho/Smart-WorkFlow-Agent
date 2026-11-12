@@ -71,11 +71,16 @@ export class ZCodeProtocolClient {
 	readonly options: ZCodeProtocolClientOptions;
 	#child?: ChildProcessWithoutNullStreams;
 	#nextId = 0;
+	#browserExecutionCount = 0;
 	#pending = new Map<string, PendingRequest>();
 	#stderr = "";
 
 	constructor(options: ZCodeProtocolClientOptions) {
 		this.options = options;
+	}
+
+	get browserExecutionCount(): number {
+		return this.#browserExecutionCount;
 	}
 
 	async start(): Promise<void> {
@@ -255,7 +260,9 @@ export class ZCodeProtocolClient {
 				const requestId = readString(params, "requestId");
 				if (!requestId) throw new Error("ZCode 浏览器请求缺少 requestId");
 				const request: BrowserCommandRequest = { requestId, command: params.command };
-				return await this.options.browser.execute(request);
+				const result = await this.options.browser.execute(request);
+				this.#browserExecutionCount += 1;
+				return result;
 			}
 			default:
 				throw new Error(`Pi 尚未实现 ZCode 回调 ${method}`);
@@ -299,11 +306,15 @@ export class ZCodeProtocolDriver implements ZCodeDesktopDriver {
 	async run(request: ZCodeDesktopRequest & { sessionId: string }): Promise<ZCodeDesktopResult> {
 		const session = this.#sessions.get(request.sessionId);
 		if (!session) throw new Error(`ZCode 会话尚未准备：${request.sessionId}`);
+		const browserExecutionCount = this.client.browserExecutionCount;
 		const output = await this.client.sendAndWait(session, {
 			prompt: request.prompt,
 			marker: request.resultMarker,
 			...(request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs }),
 		});
+		if (request.requireBrowserEvidence && this.client.browserExecutionCount === browserExecutionCount) {
+			throw new Error("ZCode 会话没有调用 Browser Use，不能作为页面行为证据");
+		}
 		return { marker: request.resultMarker, output, workspacePath: request.workspacePath };
 	}
 

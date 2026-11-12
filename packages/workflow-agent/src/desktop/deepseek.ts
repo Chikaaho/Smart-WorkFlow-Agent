@@ -61,8 +61,9 @@ export class DeepSeekDesktopAdapter implements DesktopHarnessAdapter {
 	async dispatch(input: DispatchInput, prepared: PreparedDispatch): Promise<ExecutorReceipt> {
 		const marker = `WORKFLOW_${input.taskId.replaceAll(/[^A-Za-z0-9_-]/gu, "_")}`;
 		const model = await this.resolveModelBinding(input.model);
+		const roleName = input.role === "planner" ? "规划验收（Planner）" : "执行（Executor）";
 		const prompt = [
-			"本会话角色：执行（Executor）。",
+			`本会话角色：${roleName}。`,
 			`任务 ID：${input.taskId}`,
 			`需求修订：${input.requirement.revision}`,
 			input.prompt,

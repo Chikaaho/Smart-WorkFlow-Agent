@@ -1,10 +1,10 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	ChromeCdpBrowser,
 	OcxReadinessGate,
+	PersistentWorkflowRuntime,
 	PythonSupervisorEventRunner,
-	WorkflowCoordinator,
+	WorkflowRuntimeStore,
 	WorkspaceSupervisor,
 	ZCodeDesktopAdapter,
 	ZCodeProtocolClient,
@@ -12,14 +12,11 @@ import {
 	readOcxCatalog,
 	readWorkflowConfig,
 	readZCodeModelBinding,
+	resolveZCodeInstallation,
 	resolveWorkflowRoutes,
 } from "@earendil-works/pi-workflow-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-
-const ZCODE_EXECUTABLE = "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs";
-const ZCODE_BUILTIN_PROVIDER_CONFIG =
-	"/Applications/ZCode.app/Contents/Resources/config/provider/zcode-builtin.json";
-const ZCODE_PERSONAL_PROVIDER_CONFIG = join(homedir(), ".zcode", "v2", "provider_config.json");
+import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
 
 async function runP1(
 	ctx: ExtensionContext,
@@ -45,13 +42,14 @@ async function runP1(
 	}
 	const route = executorName ? routeResult.routes.executors[executorName] : routeResult.routes.roles.executor;
 	if (!route) throw new Error(`未配置具名 Executor：${executorName}`);
-	const binding = await readZCodeModelBinding(ZCODE_PERSONAL_PROVIDER_CONFIG, route);
+	const installation = await resolveZCodeInstallation();
+	const binding = await readZCodeModelBinding(installation.personalProviderConfig, route);
 	const stateDir = process.env.SMART_WORKFLOW_SUPERVISOR_STATE_DIR ?? `${ctx.cwd}/.workflow/supervisor`;
 	const browser = new ChromeCdpBrowser();
 	const client = new ZCodeProtocolClient({
-		executable: ZCODE_EXECUTABLE,
-		builtinProviderConfig: ZCODE_BUILTIN_PROVIDER_CONFIG,
-		personalProviderConfig: ZCODE_PERSONAL_PROVIDER_CONFIG,
+		executable: installation.agentExecutable,
+		builtinProviderConfig: installation.builtinProviderConfig,
+		personalProviderConfig: installation.personalProviderConfig,
 		workspacePath: ctx.cwd,
 		browser,
 		toolAllowlist: ["Skill", "mcp__node_repl__js"],
@@ -60,7 +58,8 @@ async function runP1(
 		workspacePath: ctx.cwd,
 		driver: new ZCodeProtocolDriver(client),
 		resolveModelBinding: async (selectedRoute) =>
-			await readZCodeModelBinding(ZCODE_PERSONAL_PROVIDER_CONFIG, selectedRoute),
+			await readZCodeModelBinding(installation.personalProviderConfig, selectedRoute),
+		requireBrowserEvidence: true,
 		timeoutMs: 180_000,
 	});
 	const supervisor = new WorkspaceSupervisor({
@@ -73,41 +72,51 @@ async function runP1(
 		workspace: ctx.cwd,
 		host: "zcode",
 	});
-	const workflow = new WorkflowCoordinator(
-		routeResult.routes,
+	const runtime = await PersistentWorkflowRuntime.open({
+		id: "filter-pagination-zcode",
+		workspace: ctx.cwd,
+		store: new WorkflowRuntimeStore(
+			process.env.SMART_WORKFLOW_RUNTIME_STATE_DIR ?? join(ctx.cwd, ".workflow", "runtime"),
+		),
+		routes: routeResult.routes,
 		adapter,
 		supervisor,
 		readiness,
-	);
+	});
 
 	ctx.ui.setStatus("workflow-p1-zcode", `ZCode ${binding.providerName} 正在执行 P1`);
 	try {
-		const requirement = workflow.draft({
-			id: `filter-pagination-${Date.now()}`,
-			goal: "筛选后翻页",
-			acceptance: ["部门仍为财务部", "页码为 2 / 2", "编号为 AP-110、AP-113、AP-116"],
-		});
-		workflow.confirm(requirement.revision);
-		const attempt = await workflow.dispatch({
-			...(executorName ? { executorName } : {}),
-			prompt: [
-				"只使用 Browser Use 操作用户可见的浏览器。",
-				"打开 http://127.0.0.1:4173/p0-filter-pagination-demo.html。",
-				"把“部门”筛选为“财务部”，再点击“下一页”。",
-				"读取当前部门、页码和表格内全部编号。",
-				"不得使用 Shell、curl、fetch、读取页面源码或其他浏览器。",
-				'结果写成单行 JSON：{"department":"财务部","page":"2 / 2","ids":["AP-110","AP-113","AP-116"]}',
-			].join("\n"),
-		});
-		if (!attempt.supervisor.accepted) {
-			throw new Error(`Supervisor 未接受回执：${attempt.supervisor.reason}`);
+		const result = await runtime.runUntilAccepted(
+			{
+				requirement: {
+					id: "filter-pagination",
+					goal: "筛选后翻页",
+					acceptance: ["部门仍为财务部", "页码为 2 / 2", "编号为 AP-110、AP-113、AP-116"],
+				},
+				...(executorName ? { executorName } : {}),
+				prompt: [
+					"只使用 Browser Use 操作用户可见的浏览器。",
+					"打开 http://127.0.0.1:4173/p0-filter-pagination-demo.html。",
+					"把“部门”筛选为“财务部”，再点击“下一页”。",
+					"读取当前部门、页码和表格内全部编号。",
+					"不得使用 Shell、curl、fetch、读取页面源码或其他浏览器。",
+					'结果写成单行 JSON：{"department":"财务部","page":"2 / 2","ids":["AP-110","AP-113","AP-116"]}',
+				].join("\n"),
+				plannerInstructions: "只使用 Browser Use 读取当前可见页面，不得用 Shell、fetch 或页面源码代替验收。",
+				maxAttempts: 60,
+			},
+			{ onLimitReached: (checkpoint) => promptForAdditionalWorkflowAttempts(ctx, checkpoint) },
+		);
+		if (result.status === "cancelled") {
+			ctx.ui.notify(`任务已终止，累计派单 ${result.totalAttempts} 次`, "warning");
+			return;
 		}
-		workflow.review(attempt.taskId, true);
 		ctx.ui.notify(
-			`P1 已通过：${attempt.receipt.output}\n模型：${binding.providerName}/${binding.modelId}`,
+			`P1 已通过：${result.attempt.receipt.output}\nPlanner：${result.review.reason}\n模型：${binding.providerName}/${binding.modelId}`,
 			"info",
 		);
 	} finally {
+		await runtime.close();
 		await client.close();
 		ctx.ui.setStatus("workflow-p1-zcode", undefined);
 	}

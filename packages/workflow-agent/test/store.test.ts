@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,6 +29,7 @@ describe("WorkflowRuntimeStore", () => {
 				confirmedRevision: 1,
 				requirement: { id: "filter", revision: 1, goal: "筛选后翻页", acceptance: ["页码为 2 / 2"] },
 				attempts: [],
+				reviews: [],
 			},
 		});
 		expect(await store.load("filter-pagination")).toMatchObject({
@@ -43,6 +44,14 @@ describe("WorkflowRuntimeStore", () => {
 		const competing = new WorkflowRuntimeStore(store.directory);
 		await store.acquire();
 		await expect(competing.acquire()).rejects.toThrow("已有工作流调度进程");
+		await store.release();
+	});
+
+	it("replaces a writer lock left by a process that no longer exists", async () => {
+		const store = await createStore();
+		await mkdir(store.directory, { recursive: true });
+		await writeFile(join(store.directory, "writer.lock"), "2147483647\n", "utf8");
+		await expect(store.acquire()).resolves.toBeUndefined();
 		await store.release();
 	});
 });

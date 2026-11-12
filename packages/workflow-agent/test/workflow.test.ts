@@ -6,19 +6,38 @@ import type {
 	PreparedDispatch,
 	WorkflowSupervisor,
 } from "../src/workflow.ts";
-import { WorkflowCoordinator, WorkflowStateError } from "../src/workflow.ts";
+import { parsePlannerReview, WorkflowCoordinator, WorkflowStateError } from "../src/workflow.ts";
 
 class FakeAdapter implements DesktopHarnessAdapter {
 	inputs: DispatchInput[] = [];
 	paused: string[] = [];
 	cancelled: string[] = [];
+	plannerAccepted = true;
+	#session = 0;
 
 	async prepare(): Promise<PreparedDispatch> {
-		return { sessionId: "zcode-session-1" };
+		this.#session += 1;
+		return { sessionId: `zcode-session-${this.#session}` };
 	}
 
 	async dispatch(input: DispatchInput, prepared: PreparedDispatch): Promise<ExecutorReceipt> {
 		this.inputs.push(input);
+		if (input.role === "planner") {
+			return {
+				taskId: input.taskId,
+				sessionId: prepared.sessionId,
+				output: `WORKFLOW_REVIEW ${JSON.stringify({
+					accepted: this.plannerAccepted,
+					reason: this.plannerAccepted ? "页面证据满足全部条件" : "页码不正确",
+					criteria: input.requirement.acceptance.map((criterion) => ({
+						criterion,
+						accepted: this.plannerAccepted,
+						evidence: this.plannerAccepted ? "页面显示目标值" : "页面仍显示第 1 页",
+					})),
+					...(this.plannerAccepted ? {} : { nextPrompt: "点击下一页后重新读取页码" }),
+				})}`,
+			};
+		}
 		return { taskId: input.taskId, sessionId: prepared.sessionId, output: "筛选后第 2 / 2 页" };
 	}
 
@@ -60,6 +79,15 @@ const routes = {
 };
 
 describe("WorkflowCoordinator", () => {
+	it("rejects a Planner conclusion that conflicts with its criterion decisions", () => {
+		expect(() =>
+			parsePlannerReview(
+				'WORKFLOW_REVIEW {"accepted":true,"reason":"通过","criteria":[{"criterion":"第二页","accepted":false,"evidence":"仍为第一页"}]}',
+				["第二页"],
+			),
+		).toThrow("总结论与逐项结论不一致");
+	});
+
 	it("does not create an Executor dispatch before confirmation", async () => {
 		const adapter = new FakeAdapter();
 		const workflow = new WorkflowCoordinator(routes, adapter, supervisor, ready);
@@ -90,9 +118,48 @@ describe("WorkflowCoordinator", () => {
 		workflow.confirm(requirement.revision);
 		const attempt = await workflow.dispatch({ executorName: "ui", prompt: "执行页面验收" });
 		expect(adapter.inputs[0]?.model.selector).toBe("combo/ui");
+		expect(adapter.inputs[0]?.role).toBe("executor");
 		expect(workflow.snapshot().phase).toBe("pending_review");
-		workflow.review(attempt.taskId, true);
+		const review = await workflow.reviewWithPlanner();
+		expect(review.taskId).toBe(attempt.taskId);
 		expect(workflow.snapshot().phase).toBe("accepted");
+	});
+
+	it("uses the configured Planner model for evidence-based review", async () => {
+		const adapter = new FakeAdapter();
+		const workflow = new WorkflowCoordinator(routes, adapter, supervisor, ready);
+		const requirement = workflow.draft({
+			id: "filter-pagination",
+			goal: "筛选后翻页",
+			acceptance: ["筛选保持", "页码为 2 / 2"],
+		});
+		workflow.confirm(requirement.revision);
+		const attempt = await workflow.dispatch({ prompt: "执行页面验收" });
+		const review = await workflow.reviewWithPlanner();
+		expect(adapter.inputs[1]).toMatchObject({ role: "planner", model: { selector: "gpt-6-luna" } });
+		expect(review).toMatchObject({ taskId: attempt.taskId, accepted: true });
+		expect(review.criteria).toHaveLength(2);
+		expect(workflow.snapshot().phase).toBe("accepted");
+	});
+
+	it("returns a Planner repair prompt without changing acceptance items", async () => {
+		const adapter = new FakeAdapter();
+		adapter.plannerAccepted = false;
+		const workflow = new WorkflowCoordinator(routes, adapter, supervisor, ready);
+		const requirement = workflow.draft({
+			id: "filter-pagination",
+			goal: "筛选后翻页",
+			acceptance: ["筛选保持", "页码为 2 / 2"],
+		});
+		workflow.confirm(requirement.revision);
+		await workflow.dispatch({ prompt: "执行页面验收" });
+		const review = await workflow.reviewWithPlanner();
+		expect(review).toMatchObject({ accepted: false, nextPrompt: "点击下一页后重新读取页码" });
+		expect(workflow.snapshot()).toMatchObject({
+			phase: "confirmed",
+			requirement: { acceptance: ["筛选保持", "页码为 2 / 2"] },
+			reviews: [{ accepted: false }],
+		});
 	});
 
 	it("invalidates confirmation when the draft revision changes", async () => {
@@ -104,15 +171,17 @@ describe("WorkflowCoordinator", () => {
 	});
 
 	it("keeps acceptance items when Planner returns an attempt for repair", async () => {
-		const workflow = new WorkflowCoordinator(routes, new FakeAdapter(), supervisor, ready);
+		const adapter = new FakeAdapter();
+		const workflow = new WorkflowCoordinator(routes, adapter, supervisor, ready);
 		const requirement = workflow.draft({
 			id: "filter-pagination",
 			goal: "筛选后翻页",
 			acceptance: ["筛选保持", "页码为 2 / 2"],
 		});
 		workflow.confirm(requirement.revision);
+		adapter.plannerAccepted = false;
 		const attempt = await workflow.dispatch({ prompt: "执行页面验收" });
-		workflow.review(attempt.taskId, false);
+		await workflow.reviewWithPlanner();
 		expect(workflow.snapshot()).toMatchObject({
 			phase: "confirmed",
 			requirement: { acceptance: ["筛选保持", "页码为 2 / 2"] },
@@ -143,6 +212,7 @@ describe("WorkflowCoordinator", () => {
 			activeSessionId: "zcode-session-before-restart",
 			requirement: { id: "filter", revision: 1, goal: "筛选后翻页", acceptance: ["第二页"] },
 			attempts: [],
+			reviews: [],
 		});
 		expect(restored.snapshot()).toMatchObject({ phase: "paused", pausedFrom: "executing" });
 		await expect(restored.resume()).rejects.toThrow("核对宿主历史");

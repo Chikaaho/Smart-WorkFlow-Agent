@@ -24,6 +24,7 @@ export interface RequirementAuthorization {
 
 export interface DispatchInput {
 	taskId: string;
+	role: "executor" | "planner";
 	requirement: RequirementDraft;
 	executorName?: string;
 	model: ResolvedRoute;
@@ -80,8 +81,26 @@ export interface WorkflowAttempt {
 	taskId: string;
 	executorName?: string;
 	model: ResolvedRoute;
+	prompt?: string;
 	receipt: ExecutorReceipt;
 	supervisor: SupervisorDecision;
+}
+
+export interface PlannerCriterionDecision {
+	criterion: string;
+	accepted: boolean;
+	evidence: string;
+}
+
+export interface PlannerReviewDecision {
+	reviewId: string;
+	taskId: string;
+	sessionId: string;
+	accepted: boolean;
+	reason: string;
+	criteria: PlannerCriterionDecision[];
+	nextPrompt?: string;
+	output: string;
 }
 
 export interface WorkflowSnapshot {
@@ -92,6 +111,7 @@ export interface WorkflowSnapshot {
 	pausedFrom?: Exclude<WorkflowPhase, "paused" | "cancelled">;
 	activeSessionId?: string;
 	attempts: WorkflowAttempt[];
+	reviews: PlannerReviewDecision[];
 }
 
 export class WorkflowStateError extends Error {}
@@ -101,9 +121,10 @@ export class WorkflowCoordinator {
 	readonly adapter: DesktopHarnessAdapter;
 	readonly supervisor: WorkflowSupervisor;
 	readonly readiness: WorkflowReadinessGate;
-	#state: WorkflowSnapshot = { phase: "draft", attempts: [] };
+	#state: WorkflowSnapshot = { phase: "draft", attempts: [], reviews: [] };
 	#attempt = 0;
 	#activePrepared?: PreparedDispatch;
+	readonly #onSnapshot?: (snapshot: WorkflowSnapshot) => Promise<void>;
 
 	constructor(
 		routes: ResolvedWorkflowRoutes,
@@ -111,13 +132,15 @@ export class WorkflowCoordinator {
 		supervisor: WorkflowSupervisor,
 		readiness: WorkflowReadinessGate,
 		initialState?: WorkflowSnapshot,
+		onSnapshot?: (snapshot: WorkflowSnapshot) => Promise<void>,
 	) {
 		this.routes = routes;
 		this.adapter = adapter;
 		this.supervisor = supervisor;
 		this.readiness = readiness;
+		this.#onSnapshot = onSnapshot;
 		if (initialState) {
-			this.#state = structuredClone(initialState);
+			this.#state = { ...structuredClone(initialState), reviews: structuredClone(initialState.reviews ?? []) };
 			this.#attempt = initialState.attempts.length;
 			if (initialState.activeSessionId) this.#activePrepared = { sessionId: initialState.activeSessionId };
 			if (initialState.phase === "executing") {
@@ -133,7 +156,12 @@ export class WorkflowCoordinator {
 	draft(input: Omit<RequirementDraft, "revision">): RequirementDraft {
 		const previousRevision = this.#state.requirement?.revision ?? 0;
 		const requirement = { ...input, revision: previousRevision + 1 };
-		this.#state = { phase: "draft", requirement, attempts: [...this.#state.attempts] };
+		this.#state = {
+			phase: "draft",
+			requirement,
+			attempts: [...this.#state.attempts],
+			reviews: [...this.#state.reviews],
+		};
 		return structuredClone(requirement);
 	}
 
@@ -178,14 +206,21 @@ export class WorkflowCoordinator {
 		const taskId = `${requirement.id}:r${requirement.revision}:a${this.#attempt}`;
 		const dispatchInput: DispatchInput = {
 			taskId,
+			role: "executor",
 			requirement,
 			...(input.executorName ? { executorName: input.executorName } : {}),
 			model,
 			prompt: input.prompt,
 		};
+		if (this.#activePrepared) {
+			await this.adapter.release?.(this.#activePrepared);
+			this.#activePrepared = undefined;
+			this.#state = { ...this.#state, activeSessionId: undefined };
+		}
 		const prepared = await this.adapter.prepare(dispatchInput);
 		this.#activePrepared = prepared;
 		this.#state = { ...this.#state, activeSessionId: prepared.sessionId };
+		await this.#persist();
 		const start = await this.supervisor.start({
 			taskId,
 			sessionId: prepared.sessionId,
@@ -194,9 +229,13 @@ export class WorkflowCoordinator {
 		});
 		if (!start.accepted) {
 			await this.adapter.release?.(prepared);
+			this.#activePrepared = undefined;
+			this.#state = { ...this.#state, activeSessionId: undefined };
+			await this.#persist();
 			throw new WorkflowStateError(`Supervisor 拒绝启动任务：${start.reason}`);
 		}
 		this.#state = { ...this.#state, phase: "executing" };
+		await this.#persist();
 		const receipt = await this.adapter.dispatch(dispatchInput, prepared);
 		if (receipt.taskId !== taskId) throw new WorkflowStateError("Executor 回执的任务 ID 与派单不一致");
 		if (receipt.sessionId !== prepared.sessionId) throw new WorkflowStateError("Executor 回执的会话 ID 与派单不一致");
@@ -205,6 +244,7 @@ export class WorkflowCoordinator {
 			taskId,
 			...(input.executorName ? { executorName: input.executorName } : {}),
 			model,
+			prompt: input.prompt,
 			receipt,
 			supervisor,
 		};
@@ -223,7 +263,53 @@ export class WorkflowCoordinator {
 							phase: completedPhase,
 							attempts: [...this.#state.attempts, attempt],
 						};
+		await this.#persist();
 		return structuredClone(attempt);
+	}
+
+	async reviewWithPlanner(additionalInstructions?: string): Promise<PlannerReviewDecision> {
+		const requirement = this.#state.requirement;
+		const attempt = this.#state.attempts.at(-1);
+		if (!requirement || this.#state.phase !== "pending_review" || !attempt?.supervisor.accepted) {
+			throw new WorkflowStateError("当前没有可供 Planner 复核的回执");
+		}
+		const model = this.routes.roles.planner;
+		if (!model) throw new WorkflowStateError("未配置 Planner 模型");
+		await this.readiness.assertReady();
+		const reviewId = `${attempt.taskId}:planner:${this.#state.reviews.length + 1}`;
+		const dispatchInput: DispatchInput = {
+			taskId: reviewId,
+			role: "planner",
+			requirement,
+			model,
+			prompt: buildPlannerPrompt(requirement, attempt, additionalInstructions),
+		};
+		const prepared = await this.adapter.prepare(dispatchInput);
+		try {
+			const receipt = await this.adapter.dispatch(dispatchInput, prepared);
+			if (receipt.taskId !== reviewId || receipt.sessionId !== prepared.sessionId) {
+				throw new WorkflowStateError("Planner 回执与复核会话不一致");
+			}
+			const parsed = parsePlannerReview(receipt.output, requirement.acceptance);
+			const review: PlannerReviewDecision = {
+				reviewId,
+				taskId: attempt.taskId,
+				sessionId: prepared.sessionId,
+				...parsed,
+				output: receipt.output,
+			};
+			this.#state = { ...this.#state, reviews: [...this.#state.reviews, review] };
+			this.#applyPlannerReview(attempt.taskId, review.accepted);
+			if (this.#activePrepared) {
+				await this.adapter.release?.(this.#activePrepared);
+				this.#activePrepared = undefined;
+				this.#state = { ...this.#state, activeSessionId: undefined };
+			}
+			await this.#persist();
+			return structuredClone(review);
+		} finally {
+			await this.adapter.release?.(prepared);
+		}
 	}
 
 	async takeover(): Promise<void> {
@@ -241,6 +327,7 @@ export class WorkflowCoordinator {
 			phase: "paused",
 			pausedFrom: this.#state.phase as Exclude<WorkflowPhase, "paused" | "cancelled">,
 		};
+		await this.#persist();
 	}
 
 	async resume(): Promise<void> {
@@ -254,6 +341,7 @@ export class WorkflowCoordinator {
 		const phase = this.#state.pausedFrom;
 		const { pausedFrom: _pausedFrom, ...state } = this.#state;
 		this.#state = { ...state, phase };
+		await this.#persist();
 	}
 
 	reconcileAfterRestart(phase: "confirmed" | "pending_review"): void {
@@ -272,9 +360,10 @@ export class WorkflowCoordinator {
 			else await this.adapter.release?.(this.#activePrepared);
 		}
 		this.#state = { ...this.#state, phase: "cancelled" };
+		await this.#persist();
 	}
 
-	review(taskId: string, accepted: boolean): void {
+	#applyPlannerReview(taskId: string, accepted: boolean): void {
 		if (this.#state.phase !== "pending_review") throw new WorkflowStateError("当前没有可供 Planner 复核的回执");
 		const attempt = this.#state.attempts.at(-1);
 		if (!attempt || attempt.taskId !== taskId || !attempt.supervisor.accepted) {
@@ -282,4 +371,92 @@ export class WorkflowCoordinator {
 		}
 		this.#state = { ...this.#state, phase: accepted ? "accepted" : "confirmed" };
 	}
+
+	async #persist(): Promise<void> {
+		await this.#onSnapshot?.(this.snapshot());
+	}
+}
+
+function buildPlannerPrompt(
+	requirement: RequirementDraft,
+	attempt: WorkflowAttempt,
+	additionalInstructions?: string,
+): string {
+	return [
+		"你是 Planner，只负责独立验收 Executor 的实际结果。",
+		`目标：${requirement.goal}`,
+		"验收条件：",
+		...requirement.acceptance.map((criterion, index) => `${index + 1}. ${criterion}`),
+		attempt.prompt ? `Executor 原派单：${attempt.prompt}` : "",
+		`Executor 回执：${attempt.receipt.output}`,
+		attempt.receipt.browserEvidence?.page ? `Executor 记录的页面证据：${attempt.receipt.browserEvidence.page}` : "",
+		`Supervisor 结果：${attempt.supervisor.reason}`,
+		"必须独立核对可用的行为证据，不能仅相信 Executor 自述；任务涉及页面时，使用当前 Harness 的浏览器工具读取页面现状。",
+		"逐项给出可复核的页面证据。任一条件没有证据或不成立时，accepted 必须为 false，并在 nextPrompt 中写明下一次 Executor 要修复或补证的动作。",
+		additionalInstructions?.trim() || "",
+		'只输出单行 JSON：{"accepted":true,"reason":"...","criteria":[{"criterion":"原验收条件全文","accepted":true,"evidence":"页面中读到的事实"}],"nextPrompt":"未通过时必填"}',
+	]
+		.filter(Boolean)
+		.join("\n");
+}
+
+export function parsePlannerReview(
+	output: string,
+	acceptance: string[],
+): Omit<PlannerReviewDecision, "reviewId" | "taskId" | "sessionId" | "output"> {
+	let value: unknown;
+	for (const line of output.split(/\r?\n/u).toReversed()) {
+		const objectStart = line.indexOf("{");
+		if (objectStart < 0) continue;
+		try {
+			value = JSON.parse(line.slice(objectStart));
+			break;
+		} catch {}
+	}
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new WorkflowStateError("Planner 没有返回可解析的单行 JSON 结论");
+	}
+	const record = value as Record<string, unknown>;
+	if (typeof record.accepted !== "boolean" || typeof record.reason !== "string" || !record.reason.trim()) {
+		throw new WorkflowStateError("Planner 结论缺少 accepted 或 reason");
+	}
+	if (!Array.isArray(record.criteria) || record.criteria.length !== acceptance.length) {
+		throw new WorkflowStateError("Planner 没有逐项返回全部验收条件");
+	}
+	const criteria = record.criteria.map((item) => {
+		if (!item || typeof item !== "object" || Array.isArray(item)) {
+			throw new WorkflowStateError("Planner 验收项格式无效");
+		}
+		const criterion = item as Record<string, unknown>;
+		if (
+			typeof criterion.criterion !== "string" ||
+			typeof criterion.accepted !== "boolean" ||
+			typeof criterion.evidence !== "string" ||
+			!criterion.evidence.trim()
+		) {
+			throw new WorkflowStateError("Planner 验收项缺少 criterion、accepted 或 evidence");
+		}
+		return {
+			criterion: criterion.criterion,
+			accepted: criterion.accepted,
+			evidence: criterion.evidence.trim(),
+		};
+	});
+	const returnedCriteria = new Set(criteria.map((criterion) => criterion.criterion));
+	if (
+		returnedCriteria.size !== acceptance.length ||
+		acceptance.some((criterion) => !returnedCriteria.has(criterion))
+	) {
+		throw new WorkflowStateError("Planner 返回的验收条件与需求修订不一致");
+	}
+	const accepted = criteria.every((criterion) => criterion.accepted);
+	if (record.accepted !== accepted) throw new WorkflowStateError("Planner 总结论与逐项结论不一致");
+	const nextPrompt = typeof record.nextPrompt === "string" ? record.nextPrompt.trim() : "";
+	if (!accepted && !nextPrompt) throw new WorkflowStateError("Planner 退回任务时必须给出 nextPrompt");
+	return {
+		accepted,
+		reason: record.reason.trim(),
+		criteria,
+		...(nextPrompt ? { nextPrompt } : {}),
+	};
 }

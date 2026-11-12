@@ -13,11 +13,11 @@ modelGateway:
 # 本例默认走 OpenCode(Chat)，ui 覆盖为 CommandCode(Chat)。
 roles:
   planner:
-    model: gpt-6-luna
+    model: opencode-go/deepseek-v4.1-flash
   executor:
     model: opencode-go/deepseek-v4.1-flash
   admin:
-    model: gpt-6-luna
+    model: opencode-go/deepseek-v4.1-flash
 
 # 可选。Planner 指定 ui 时改用 CommandCode(Chat)，省略执行人选时使用 roles.executor。
 executors:
