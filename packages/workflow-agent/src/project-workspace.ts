@@ -5,6 +5,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const WORKSPACE_CLONE_MAX_ATTEMPTS = 3;
+const WORKSPACE_CLONE_RETRY_DELAYS_MS = [500, 1_000] as const;
 
 export const DEFAULT_PROJECT_WORKSPACE_TEMPLATE = "https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace.git";
 
@@ -40,6 +42,29 @@ async function pathExists(path: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+async function cloneWorkspaceTemplate(git: GitCommandRunner, source: string, workspacePath: string): Promise<void> {
+	let lastError: unknown;
+	for (let attempt = 1; attempt <= WORKSPACE_CLONE_MAX_ATTEMPTS; attempt++) {
+		try {
+			await git.run(["clone", "--branch", "main", source, workspacePath]);
+			return;
+		} catch (error) {
+			lastError = error;
+			await rm(workspacePath, { recursive: true, force: true });
+			if (attempt < WORKSPACE_CLONE_MAX_ATTEMPTS) {
+				await new Promise((resolve) => setTimeout(resolve, WORKSPACE_CLONE_RETRY_DELAYS_MS[attempt - 1]));
+			}
+		}
+	}
+	throw new Error(`克隆 Workspace 模板连续 ${WORKSPACE_CLONE_MAX_ATTEMPTS} 次失败：${errorMessage(lastError)}`, {
+		cause: lastError,
+	});
 }
 
 export function projectWorkflowPaths(projectRoot: string): ProjectWorkflowPaths {
@@ -132,7 +157,7 @@ export async function createProjectWorkspaceDraft(input: {
 	].join("\n");
 	let finalized = false;
 	try {
-		await git.run(["clone", "--branch", "main", source, workspacePath]);
+		await cloneWorkspaceTemplate(git, source, workspacePath);
 		await git.run(["-C", workspacePath, "switch", "-c", "project"]);
 		await git.run(["-C", workspacePath, "remote", "rename", "origin", "template"]);
 		await git.run(["-C", workspacePath, "remote", "set-url", "--push", "template", "DISABLED"]);

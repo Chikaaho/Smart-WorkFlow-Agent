@@ -116,6 +116,40 @@ describe("project workspace initialization", () => {
 		}
 	});
 
+	it("retries transient template clone failures", async () => {
+		const root = await mkdtemp(join(tmpdir(), "workflow-project-workspace-"));
+		try {
+			const template = await createTemplate(root);
+			const projectRoot = join(root, "project");
+			await mkdir(projectRoot);
+			let cloneAttempts = 0;
+			const draft = await createProjectWorkspaceDraft({
+				projectRoot,
+				materials: "验证模板克隆重试。",
+				templateSource: template,
+				git: {
+					async run(args) {
+						if (args[0] === "clone") {
+							cloneAttempts++;
+							if (cloneAttempts < 3) {
+								await mkdir(args[args.length - 1], { recursive: true });
+								throw new Error("temporary TLS failure");
+							}
+						}
+						await execFileAsync("git", [...args], { encoding: "utf8" });
+					},
+				},
+			});
+			expect(cloneAttempts).toBe(3);
+			expect(await readFile(join(draft.workspacePath, "knowledge", "project-materials.md"), "utf8")).toContain(
+				"验证模板克隆重试",
+			);
+			await draft.discard();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
 	it("refuses to finalize when the original project materials were changed", async () => {
 		const root = await mkdtemp(join(tmpdir(), "workflow-project-workspace-"));
 		try {
