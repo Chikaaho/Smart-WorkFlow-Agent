@@ -24,3 +24,4 @@
 - ZCode Executor sessions now default to `high` reasoning and Planner sessions to `medium`, with compatibility fallback when ZCode rejects the default.
 - Project configuration, Workspace, runtime records, and Supervisor state now always resolve inside the active project directory; environment overrides can no longer split one project across unrelated paths.
 - A configured OCX proxy now starts automatically when `sw-agent` opens and the proxy is not already running.
+- OCX user configuration no longer stores unused dashboard URL and version metadata.

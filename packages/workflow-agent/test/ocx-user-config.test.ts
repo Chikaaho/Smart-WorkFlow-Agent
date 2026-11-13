@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -56,8 +56,6 @@ describe("OCX user configuration", () => {
 				ocx: {
 					executable: "ocx",
 					baseUrl: "http://127.0.0.1:10100/v1",
-					dashboardUrl: "http://localhost:10100/",
-					version: "2.100.1",
 					installMethod: "npm",
 					configPath: "/users/demo/.opencodex/config.json",
 				},
@@ -152,6 +150,56 @@ describe("OCX user configuration", () => {
 			});
 			expect(integration.status).toMatchObject({ running: true, healthy: true });
 			expect(calls.slice(0, 3)).toEqual([["status", "--json"], ["start"], ["status", "--json"]]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("removes unused metadata from an existing user configuration", async () => {
+		const root = await mkdtemp(join(tmpdir(), "workflow-ocx-config-"));
+		const configPath = join(root, "smart-workflow.json");
+		try {
+			await writeFile(
+				configPath,
+				JSON.stringify({
+					schemaVersion: 1,
+					ocx: {
+						executable: "ocx",
+						baseUrl: "http://127.0.0.1:10100/v1",
+						dashboardUrl: "http://localhost:10100/",
+						version: "2.100.1",
+					},
+				}),
+			);
+			await ensureOcxUserConfig({
+				configPath,
+				runner: {
+					async run(args) {
+						if (args[0] === "status") {
+							return JSON.stringify({
+								proxy: { running: true, health: { ok: true } },
+								listen: { hostname: "127.0.0.1", port: 10100 },
+							});
+						}
+						if (args[0] === "account") {
+							return JSON.stringify({ accounts: [{ provider: "openai", active: true }] });
+						}
+						if (args[0] === "models") {
+							return JSON.stringify([
+								{ provider: "openai", id: "gpt-6-luna", namespaced: "gpt-6-luna", disabled: false },
+							]);
+						}
+						return JSON.stringify({ combos: [] });
+					},
+				},
+			});
+			expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
+				schemaVersion: 1,
+				ocx: {
+					executable: "ocx",
+					baseUrl: "http://127.0.0.1:10100/v1",
+				},
+			});
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

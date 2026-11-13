@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import {
 	assertOcxReady,
 	isOcxAccountUsable,
@@ -23,8 +24,6 @@ export interface OcxUserConfig {
 	ocx: {
 		executable: string;
 		baseUrl: string;
-		dashboardUrl: string;
-		version?: string;
 		installMethod?: string;
 		configPath?: string;
 	};
@@ -61,8 +60,6 @@ export function parseOcxUserConfig(value: unknown): OcxUserConfig {
 	}
 	const executable = requiredString(value.ocx, "executable", "ocx");
 	const baseUrl = requiredString(value.ocx, "baseUrl", "ocx");
-	const dashboardUrl = requiredString(value.ocx, "dashboardUrl", "ocx");
-	const version = optionalString(value.ocx, "version");
 	const installMethod = optionalString(value.ocx, "installMethod");
 	const configPath = optionalString(value.ocx, "configPath");
 	return {
@@ -70,8 +67,6 @@ export function parseOcxUserConfig(value: unknown): OcxUserConfig {
 		ocx: {
 			executable,
 			baseUrl,
-			dashboardUrl,
-			...(version ? { version } : {}),
 			...(installMethod ? { installMethod } : {}),
 			...(configPath ? { configPath } : {}),
 		},
@@ -100,14 +95,21 @@ export async function writeOcxUserConfig(configPath: string, config: OcxUserConf
 	await rename(temporaryPath, configPath);
 }
 
+async function storedConfigMatches(configPath: string, config: OcxUserConfig): Promise<boolean> {
+	try {
+		return isDeepStrictEqual(JSON.parse(await readFile(configPath, "utf8")), config);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
+	}
+}
+
 function configFromStatus(executable: string, status: OcxRuntimeStatus): OcxUserConfig {
 	return {
 		schemaVersion: 1,
 		ocx: {
 			executable,
 			baseUrl: status.baseUrl ?? "http://127.0.0.1:10100/v1",
-			dashboardUrl: status.dashboardUrl ?? "http://localhost:10100/",
-			...(status.version ? { version: status.version } : {}),
 			...(status.installMethod ? { installMethod: status.installMethod } : {}),
 			...(status.configPath ? { configPath: status.configPath } : {}),
 		},
@@ -157,7 +159,7 @@ export async function ensureOcxUserConfig(input: {
 		throw new OcxReadinessError("not_configured", "OCX 没有可用模型；请先运行 ocx setup 配置账号和模型");
 	}
 	const config = configFromStatus(executable, status);
-	if (!existing || JSON.stringify(existing) !== JSON.stringify(config)) {
+	if (!existing || !(await storedConfigMatches(input.configPath, config))) {
 		await writeOcxUserConfig(input.configPath, config);
 	}
 	return {

@@ -91,7 +91,7 @@ proxy.health.ok = true
 - macOS / Linux：`~/.pi/agent/smart-workflow.json`
 - Windows：`%USERPROFILE%\.pi\agent\smart-workflow.json`
 
-配置保存 OCX CLI、代理地址、控制台地址、版本和 OCX 自身配置文件位置，不保存账号令牌。示例：
+配置保存 OCX CLI、代理地址、安装方式和 OCX 自身配置文件位置，不保存账号令牌。示例：
 
 ```json
 {
@@ -99,8 +99,8 @@ proxy.health.ok = true
   "ocx": {
     "executable": "ocx",
     "baseUrl": "http://127.0.0.1:10100/v1",
-    "dashboardUrl": "http://localhost:10100/",
-    "version": "2.100.1"
+    "installMethod": "npm",
+    "configPath": "/Users/you/.opencodex/config.json"
   }
 }
 ```

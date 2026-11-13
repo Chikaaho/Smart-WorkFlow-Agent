@@ -19,7 +19,7 @@ Pi 的桌面 Harness 工作流核心。它提供：
 
 Pi 在每次 Executor 和 Planner 派单前执行 `ocx status --json`。CLI 缺失、代理未运行或健康检查失败时，不会创建 Harness 会话。
 
-Smart-WorkFlow 首次发现已登录且有可用模型的 OCX 时，会在 Pi 用户目录创建 `smart-workflow.json`，保存 CLI、代理地址、控制台地址、版本和 OCX 配置路径。账号令牌仍由 OCX 管理。`/ocx-setup` 用于首次创建或刷新这份用户配置；OCX 已配置但代理未运行时会自动启动，未安装或没有可用账号时返回对应操作步骤。
+Smart-WorkFlow 首次发现已登录且有可用模型的 OCX 时，会在 Pi 用户目录创建 `smart-workflow.json`，保存 CLI、代理地址、安装方式和 OCX 配置路径。账号令牌仍由 OCX 管理。`/ocx-setup` 用于首次创建或刷新这份用户配置；OCX 已配置但代理未运行时会自动启动，未安装或没有可用账号时返回对应操作步骤。
 
 `PersistentWorkflowRuntime` 负责完整循环：确认需求、派发 Executor、等待 Supervisor、派发 Planner、解析逐项 JSON 结论，再按 `nextPrompt` 派发下一轮。单轮默认和最高上限均为 60 次。到达上限时返回累计派单、最近一次 Planner 结论和未通过项；Pi 询问用户是否继续，继续时读取 1–60 的新增轮数并重复执行，直到验收通过或用户终止。Planner 总结论必须和全部验收项一致，退回时必须给出下一次派单内容；格式不完整时不会进入 `accepted`。
 
