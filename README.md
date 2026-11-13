@@ -6,10 +6,12 @@ Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。它为每�
 
 | 项目 | 内容 |
 |---|---|
-| [Smart-WorkFlow-Agent](https://github.com/Chikaaho/Smart-WorkFlow-Agent) | Pi 运行时、OCX 模型路由、ZCode / DeepSeek Harness 协议接入、工作流状态与本地运行记录 |
+| [Smart-WorkFlow-Agent](https://github.com/Chikaaho/Smart-WorkFlow-Agent) | Pi 执行器、OCX 模型路由、ZCode / DeepSeek Harness 协议接入和工作流运行时 |
 | [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) | 通用 Workspace 模板；`main` 定义 Planner、Executor、Admin、Supervisor / Validator 的权限、事件和验收流程 |
 
 Pi 默认把启动目录作为 `project-dir`。首次运行 `/init` 时，它从通用 Workspace `main` 创建 `<project-dir>/.workflow/workspace`，让 Executor 根据用户提供的材料和项目代码初始化 `project.md`、`knowledge/` 和 `memory/`。此后该项目只使用自己的本地 Workspace；运行记录保存在 `<project-dir>/.workflow/runtime`。
+
+Pi 只是执行器。项目配置、Workspace 和运行状态都由项目目录持有，不写入 Pi 的安装目录，也不通过全局变量绑定项目。
 
 ## 开始前准备
 
@@ -35,6 +37,13 @@ cd Smart-WorkFlow-Agent
 npm ci --ignore-scripts
 npm --prefix packages/workflow-agent run build
 ```
+
+仓库根目录提供两个启动入口：
+
+- macOS / Linux：`smart-workflow.sh`
+- Windows PowerShell：`smart-workflow.ps1`
+
+启动入口只加载 Pi 和 Smart-WorkFlow 扩展，当前终端所在目录仍是项目目录。
 
 安装并启动 OCX：
 
@@ -82,31 +91,25 @@ OCX 没有启动时，Pi 不会把任务交给 ZCode 或 DeepSeek Harness。
 
 其他安装目录按“自定义安装目录”设置环境变量。
 
-## 设置本机路径
+## 项目目录
 
-把下面两个路径改成你自己的：
+每个项目使用自己的配置和 Workspace：
 
-macOS：
-
-```bash
-export AGENT_REPO="/absolute/path/to/Smart-WorkFlow-Agent"
-export TARGET_WORKSPACE="/absolute/path/to/your-project"
-export SMART_WORKFLOW_CONFIG="$TARGET_WORKSPACE/workflow.config.yaml"
+```text
+your-project/
+├── workflow.config.yaml
+└── .workflow/
+    ├── workspace/
+    ├── runtime/
+    └── supervisor/
 ```
 
-Windows PowerShell：
+- `workflow.config.yaml`：选择 Harness、角色模型和具名 Executor。
+- `.workflow/workspace`：`/init` 从 [Smart-WorkFlow-Agent-Workspace main](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) 创建的项目 Workspace。
+- `.workflow/runtime`：任务状态、Executor 回执和 Planner 验收记录。
+- `.workflow/supervisor`：Supervisor / Validator 的本地状态。
 
-```powershell
-$env:AGENT_REPO = "C:\path\to\Smart-WorkFlow-Agent"
-$env:TARGET_WORKSPACE = "C:\path\to\your-project"
-$env:SMART_WORKFLOW_CONFIG = "$env:TARGET_WORKSPACE\workflow.config.yaml"
-```
-
-- `AGENT_REPO`：本仓库路径。
-- `TARGET_WORKSPACE`：要处理的项目路径。
-- `SMART_WORKFLOW_CONFIG`：项目的角色模型配置。未设置时默认读取项目根目录的 `workflow.config.yaml`。
-
-`/init` 默认从 [Smart-WorkFlow-Agent-Workspace main](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) 创建项目 Workspace。测试本地模板时可临时设置 `SMART_WORKFLOW_TEMPLATE` 为另一个 Git 仓库地址或本地 Git 目录。
+Pi 启动时使用当前目录。需要切换项目时运行 `/project-dir <路径>`；Pi 不保存全局项目路径。测试本地 Workspace 模板时，可临时设置 `SMART_WORKFLOW_TEMPLATE` 为另一个 Git 仓库地址或本地 Git 目录。
 
 ## 使用 ZCode
 
@@ -123,9 +126,20 @@ $env:SMART_WORKFLOW_CONFIG = "$env:TARGET_WORKSPACE\workflow.config.yaml"
 
 ### 2. 复制 ZCode 配置
 
+macOS / Linux：
+
 ```bash
-cp "$AGENT_REPO/examples/workflow-extension/workflow.config.example.yaml" \
-  "$TARGET_WORKSPACE/workflow.config.yaml"
+cd /absolute/path/to/your-project
+cp /absolute/path/to/Smart-WorkFlow-Agent/examples/workflow-extension/workflow.config.example.yaml \
+  ./workflow.config.yaml
+```
+
+Windows PowerShell：
+
+```powershell
+Set-Location C:\path\to\your-project
+Copy-Item C:\path\to\Smart-WorkFlow-Agent\examples\workflow-extension\workflow.config.example.yaml `
+  .\workflow.config.yaml
 ```
 
 默认配置使用 OpenCode(Chat)。运行命令时加上 `ui`，会改用 CommandCode(Chat)：
@@ -160,17 +174,15 @@ Executor 默认使用 `high` 推理档位，Planner 默认使用 `medium`；ZCod
 ### 3. 启动 ZCode 工作流
 
 ```bash
-cd "$TARGET_WORKSPACE"
-"$AGENT_REPO/pi-test.sh" \
-  --extension "$AGENT_REPO/examples/workflow-extension/smart-workflow.ts"
+cd /absolute/path/to/your-project
+/absolute/path/to/Smart-WorkFlow-Agent/smart-workflow.sh
 ```
 
 Windows PowerShell：
 
 ```powershell
-Set-Location $env:TARGET_WORKSPACE
-& "$env:AGENT_REPO\pi-test.ps1" `
-  --extension "$env:AGENT_REPO\examples\workflow-extension\smart-workflow.ts"
+Set-Location C:\path\to\your-project
+& "C:\path\to\Smart-WorkFlow-Agent\smart-workflow.ps1"
 ```
 
 首次进入项目先初始化本地 Workspace。Pi 会提示输入项目说明、材料路径或文档链接：
@@ -215,9 +227,9 @@ Pi 创建和恢复 ZCode 会话时会自动选择“完全操控”（`yolo`）�
 启动模型切换工具：
 
 ```bash
-cd "$TARGET_WORKSPACE"
-"$AGENT_REPO/pi-test.sh" \
-  --extension "$AGENT_REPO/examples/workflow-extension/zcode-desktop-control.ts"
+cd /absolute/path/to/your-project
+/absolute/path/to/Smart-WorkFlow-Agent/pi-test.sh \
+  --extension /absolute/path/to/Smart-WorkFlow-Agent/examples/workflow-extension/zcode-desktop-control.ts
 ```
 
 进入 Pi 后运行：
@@ -282,9 +294,20 @@ Windows 把最后一行改为：
 
 ### 2. 复制 DeepSeek 配置
 
+macOS / Linux：
+
 ```bash
-cp "$AGENT_REPO/examples/workflow-extension/workflow.deepseek.config.example.yaml" \
-  "$TARGET_WORKSPACE/workflow.config.yaml"
+cd /absolute/path/to/your-project
+cp /absolute/path/to/Smart-WorkFlow-Agent/examples/workflow-extension/workflow.deepseek.config.example.yaml \
+  ./workflow.config.yaml
+```
+
+Windows PowerShell：
+
+```powershell
+Set-Location C:\path\to\your-project
+Copy-Item C:\path\to\Smart-WorkFlow-Agent\examples\workflow-extension\workflow.deepseek.config.example.yaml `
+  .\workflow.config.yaml
 ```
 
 配置中的模型保持为：
@@ -306,23 +329,20 @@ executors:
 ### 3. 启动 DeepSeek Harness 工作流
 
 ```bash
-cd "$TARGET_WORKSPACE"
-"$AGENT_REPO/pi-test.sh" \
-  --extension "$AGENT_REPO/examples/workflow-extension/smart-workflow.ts"
+cd /absolute/path/to/your-project
+/absolute/path/to/Smart-WorkFlow-Agent/smart-workflow.sh
 ```
 
 Windows PowerShell：
 
 ```powershell
-Set-Location $env:TARGET_WORKSPACE
-& "$env:AGENT_REPO\pi-test.ps1" `
-  --extension "$env:AGENT_REPO\examples\workflow-extension\smart-workflow.ts"
+Set-Location C:\path\to\your-project
+& "C:\path\to\Smart-WorkFlow-Agent\smart-workflow.ps1"
 ```
 
 进入 Pi 后运行：
 
 ```text
-/project-dir C:\path\to\your-project
 /init
 /workflow-setup
 /workflow
@@ -347,14 +367,14 @@ Pi 创建 DeepSeek 会话时会自动选择“完全权限”（`danger-full-acc
 另开一个终端：
 
 ```bash
-cd "$AGENT_REPO/examples/workflow-extension"
+cd /absolute/path/to/Smart-WorkFlow-Agent/examples/workflow-extension
 python3 -m http.server 4173
 ```
 
 Windows PowerShell：
 
 ```powershell
-Set-Location "$env:AGENT_REPO\examples\workflow-extension"
+Set-Location C:\path\to\Smart-WorkFlow-Agent\examples\workflow-extension
 py -m http.server 4173
 ```
 
@@ -369,8 +389,8 @@ http://127.0.0.1:4173/p0-filter-pagination-demo.html
 通用入口使用 `/workflow`。需要单独复测仓库内置场景时，改为加载对应的示例扩展：
 
 ```bash
-"$AGENT_REPO/pi-test.sh" \
-  --extension "$AGENT_REPO/examples/workflow-extension/zcode-protocol-workflow.ts"
+/absolute/path/to/Smart-WorkFlow-Agent/pi-test.sh \
+  --extension /absolute/path/to/Smart-WorkFlow-Agent/examples/workflow-extension/zcode-protocol-workflow.ts
 ```
 
 或加载 `deepseek-protocol-workflow.ts`，再运行 `/workflow-p1-zcode [executor-name]` 或 `/workflow-p3-deepseek [executor-name]`。
@@ -484,7 +504,7 @@ macOS 用 `export`，Windows PowerShell 用 `$env:变量名 = "路径"` 设置�
 
 ### 从其他目录启动 Pi
 
-运行 `/project-dir <项目路径>` 切换 Smart-WorkFlow 的执行目录，再运行 `/init`、`/workflow-setup` 或 `/workflow`。也可以直接运行 `/init <项目路径>`。如果设置了 `SMART_WORKFLOW_CONFIG`、`SMART_WORKFLOW_RUNTIME_STATE_DIR` 或 `SMART_WORKFLOW_SUPERVISOR_STATE_DIR`，这些显式路径仍会覆盖项目目录下的默认位置；需要在多个项目间切换时建议不设置这些变量。
+运行 `/project-dir <项目路径>` 切换 Smart-WorkFlow 的执行目录，再运行 `/init`、`/workflow-setup` 或 `/workflow`。也可以直接运行 `/init <项目路径>`。切换后，配置固定读取 `<项目>/workflow.config.yaml`，Workspace 和运行状态固定写入 `<项目>/.workflow/`。
 
 ### 4173 端口被占用
 

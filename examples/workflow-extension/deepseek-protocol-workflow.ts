@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import {
 	DeepSeekDesktopAdapter,
 	DeepSeekDesktopHostClient,
@@ -9,6 +8,7 @@ import {
 	WorkflowRuntimeStore,
 	WorkspaceSupervisor,
 	assertProjectWorkspaceReady,
+	projectWorkflowPaths,
 	projectWorkspacePath,
 	readWorkflowConfig,
 	resolveDeepSeekInstallation,
@@ -18,9 +18,10 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
 
 async function runP3(ctx: ExtensionContext, executorName?: string): Promise<void> {
+	const paths = projectWorkflowPaths(ctx.cwd);
 	const projectWorkspaceRoot = projectWorkspacePath(ctx.cwd);
 	await assertProjectWorkspaceReady(projectWorkspaceRoot);
-	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(ctx.cwd, "workflow.config.yaml");
+	const configPath = paths.config;
 	const configResult = await readWorkflowConfig(configPath);
 	if (!configResult.ok) {
 		throw new Error(configResult.issues.map((issue) => `${issue.path}: ${issue.message}`).join("；"));
@@ -38,7 +39,7 @@ async function runP3(ctx: ExtensionContext, executorName?: string): Promise<void
 	const readiness = new OcxReadinessGate();
 	await readiness.assertReady();
 	const installation = await resolveDeepSeekInstallation();
-	const stateDir = process.env.SMART_WORKFLOW_SUPERVISOR_STATE_DIR ?? `${ctx.cwd}/.workflow/supervisor`;
+	const stateDir = paths.supervisor;
 	const client = new DeepSeekDesktopHostClient({
 		executable: installation.executable,
 		entry: installation.entry,
@@ -73,9 +74,7 @@ async function runP3(ctx: ExtensionContext, executorName?: string): Promise<void
 	const runtime = await PersistentWorkflowRuntime.open({
 		id: "filter-pagination-deepseek",
 		workspace: ctx.cwd,
-		store: new WorkflowRuntimeStore(
-			process.env.SMART_WORKFLOW_RUNTIME_STATE_DIR ?? join(ctx.cwd, ".workflow", "runtime"),
-		),
+		store: new WorkflowRuntimeStore(paths.runtime),
 		routes: routeResult.routes,
 		adapter,
 		supervisor,

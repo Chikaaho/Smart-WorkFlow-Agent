@@ -19,6 +19,14 @@ export interface GitCommandRunner {
 	run(args: readonly string[]): Promise<void>;
 }
 
+export interface ProjectWorkflowPaths {
+	config: string;
+	root: string;
+	workspace: string;
+	runtime: string;
+	supervisor: string;
+}
+
 class LocalGitCommandRunner implements GitCommandRunner {
 	async run(args: readonly string[]): Promise<void> {
 		await execFileAsync("git", [...args], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
@@ -34,8 +42,19 @@ async function pathExists(path: string): Promise<boolean> {
 	}
 }
 
+export function projectWorkflowPaths(projectRoot: string): ProjectWorkflowPaths {
+	const root = join(projectRoot, ".workflow");
+	return {
+		config: join(projectRoot, "workflow.config.yaml"),
+		root,
+		workspace: join(root, "workspace"),
+		runtime: join(root, "runtime"),
+		supervisor: join(root, "supervisor"),
+	};
+}
+
 export function projectWorkspacePath(projectRoot: string): string {
-	return join(projectRoot, ".workflow", "workspace");
+	return projectWorkflowPaths(projectRoot).workspace;
 }
 
 export async function resolveProjectDirectory(currentProjectRoot: string, input: string): Promise<string> {

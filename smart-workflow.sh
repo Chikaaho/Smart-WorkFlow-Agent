@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+exec "$SCRIPT_DIR/pi-test.sh" \
+  --extension "$SCRIPT_DIR/examples/workflow-extension/smart-workflow.ts" \
+  "$@"

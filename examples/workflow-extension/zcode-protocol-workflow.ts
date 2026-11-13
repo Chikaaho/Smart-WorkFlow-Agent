@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import {
 	ChromeCdpBrowser,
 	OcxReadinessGate,
@@ -10,6 +9,7 @@ import {
 	ZCodeProtocolClient,
 	ZCodeProtocolDriver,
 	assertProjectWorkspaceReady,
+	projectWorkflowPaths,
 	projectWorkspacePath,
 	readOcxCatalog,
 	readWorkflowConfig,
@@ -24,9 +24,10 @@ async function runP1(
 	ctx: ExtensionContext,
 	executorName?: string,
 ): Promise<void> {
+	const paths = projectWorkflowPaths(ctx.cwd);
 	const projectWorkspaceRoot = projectWorkspacePath(ctx.cwd);
 	await assertProjectWorkspaceReady(projectWorkspaceRoot);
-	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(ctx.cwd, "workflow.config.yaml");
+	const configPath = paths.config;
 	const configResult = await readWorkflowConfig(configPath);
 	if (!configResult.ok) {
 		throw new Error(configResult.issues.map((issue) => `${issue.path}: ${issue.message}`).join("；"));
@@ -44,7 +45,7 @@ async function runP1(
 	if (!route) throw new Error(`未配置具名 Executor：${executorName}`);
 	const installation = await resolveZCodeInstallation();
 	const binding = await readZCodeModelBinding(installation.personalProviderConfig, route);
-	const stateDir = process.env.SMART_WORKFLOW_SUPERVISOR_STATE_DIR ?? `${ctx.cwd}/.workflow/supervisor`;
+	const stateDir = paths.supervisor;
 	const browser = new ChromeCdpBrowser();
 	const client = new ZCodeProtocolClient({
 		executable: installation.agentExecutable,
@@ -75,9 +76,7 @@ async function runP1(
 	const runtime = await PersistentWorkflowRuntime.open({
 		id: "filter-pagination-zcode",
 		workspace: ctx.cwd,
-		store: new WorkflowRuntimeStore(
-			process.env.SMART_WORKFLOW_RUNTIME_STATE_DIR ?? join(ctx.cwd, ".workflow", "runtime"),
-		),
+		store: new WorkflowRuntimeStore(paths.runtime),
 		routes: routeResult.routes,
 		adapter,
 		supervisor,

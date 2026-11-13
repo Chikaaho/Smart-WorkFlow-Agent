@@ -19,6 +19,7 @@ import {
 	assertProjectWorkspaceReady,
 	createProjectWorkspaceDraft,
 	planWorkflowTask,
+	projectWorkflowPaths,
 	projectWorkspacePath,
 	readOcxCatalog,
 	readWorkflowConfig,
@@ -99,7 +100,7 @@ async function inspectSetup(
 	projectRoot: string,
 	options: { projectWorkspaceRoot?: string; requireInitializedWorkspace?: boolean } = {},
 ): Promise<SetupInspection> {
-	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(projectRoot, "workflow.config.yaml");
+	const configPath = projectWorkflowPaths(projectRoot).config;
 	const projectWorkspaceRoot = options.projectWorkspaceRoot ?? projectWorkspacePath(projectRoot);
 	const requireInitializedWorkspace = options.requireInitializedWorkspace ?? true;
 	const lines: string[] = [`项目目录：${projectRoot}`];
@@ -252,7 +253,7 @@ async function openHarness(
 	const readiness = new OcxReadinessGate();
 	const timeoutMs = harnessTimeoutMs();
 	const requireBrowserEvidence = options.requireBrowserEvidence ?? true;
-	const stateDir = process.env.SMART_WORKFLOW_SUPERVISOR_STATE_DIR ?? join(projectRoot, ".workflow", "supervisor");
+	const stateDir = projectWorkflowPaths(projectRoot).supervisor;
 	const supervisor = new WorkspaceSupervisor({
 		runner: new PythonSupervisorEventRunner({
 			root: setup.projectWorkspaceRoot,
@@ -485,9 +486,7 @@ async function runWorkflow(ctx: ExtensionContext, projectRoot: string, requested
 	const setup = await inspectSetup(ctx, projectRoot);
 	if (!setup.ready) throw new Error(setup.summary);
 	const harness = await openHarness(ctx, projectRoot, setup);
-	const store = new WorkflowRuntimeStore(
-		process.env.SMART_WORKFLOW_RUNTIME_STATE_DIR ?? join(projectRoot, ".workflow", "runtime"),
-	);
+	const store = new WorkflowRuntimeStore(projectWorkflowPaths(projectRoot).runtime);
 	let runtime: PersistentWorkflowRuntime | undefined;
 	try {
 		const active = await store.latestActive(projectRoot);

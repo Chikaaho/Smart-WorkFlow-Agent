@@ -95,7 +95,9 @@ export {
 	createProjectWorkspaceDraft,
 	DEFAULT_PROJECT_WORKSPACE_TEMPLATE,
 	type GitCommandRunner,
+	type ProjectWorkflowPaths,
 	type ProjectWorkspaceDraft,
+	projectWorkflowPaths,
 	projectWorkspacePath,
 	resolveProjectDirectory,
 } from "./project-workspace.ts";

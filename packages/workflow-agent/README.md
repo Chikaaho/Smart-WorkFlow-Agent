@@ -15,6 +15,8 @@ Pi 的桌面 Harness 工作流核心。它提供：
 
 角色权限、Supervisor / Validator 事件和业务验收流程来自 [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) 的 `main` 模板。`/init` 将模板完整克隆到当前项目的 `.workflow/workspace`，创建本地 `project` 分支，并由 Executor 根据项目材料初始化知识。后续运行只读取该项目的本地 Workspace。
 
+项目目录是唯一的配置和状态边界：`workflow.config.yaml` 位于项目根目录，Workspace、运行记录和 Supervisor 状态分别位于 `.workflow/workspace`、`.workflow/runtime` 和 `.workflow/supervisor`。Pi 读取当前项目并调度 Harness，不持有全局项目路径；这些项目路径不提供环境变量覆盖。
+
 Pi 在每次 Executor 和 Planner 派单前执行 `ocx status --json`。CLI 缺失、代理未运行或健康检查失败时，不会创建 Harness 会话。
 
 `PersistentWorkflowRuntime` 负责完整循环：确认需求、派发 Executor、等待 Supervisor、派发 Planner、解析逐项 JSON 结论，再按 `nextPrompt` 派发下一轮。单轮默认和最高上限均为 60 次。到达上限时返回累计派单、最近一次 Planner 结论和未通过项；Pi 询问用户是否继续，继续时读取 1–60 的新增轮数并重复执行，直到验收通过或用户终止。Planner 总结论必须和全部验收项一致，退回时必须给出下一次派单内容；格式不完整时不会进入 `accepted`。
@@ -46,7 +48,7 @@ Windows 默认查找当前用户和 `Program Files` 下的标准安装目录。�
 - `SMART_WORKFLOW_DEEPSEEK_RESOURCES`
 - `SMART_WORKFLOW_HARNESS_TIMEOUT_MS`：通用 Pi 入口的单次 Harness 等待时间，默认 15 分钟。
 
-ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。Pi 默认以启动目录作为项目目录；`/project-dir <path>` 可以切换目录，`/init <path>` 可以切换后直接初始化。新项目先运行 `/init`，再运行 `/workflow`；命令的可选参数是 `executors` 中的配置名，例如 `/workflow ui`。Planner 规划会自动加入 Workspace 状态同步和 Git 提交推送验收条件。
+ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。Pi 默认以启动目录作为项目目录；`/project-dir <path>` 可以切换目录，`/init <path>` 可以切换后直接初始化。仓库根目录的 `smart-workflow.sh` 和 `smart-workflow.ps1` 只负责加载 Pi 与扩展，不改变调用者的当前目录。新项目先运行 `/init`，再运行 `/workflow`；命令的可选参数是 `executors` 中的配置名，例如 `/workflow ui`。Planner 规划会自动加入 Workspace 状态同步和 Git 提交推送验收条件。
 
 ## 实机界面
 

@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
 	assertProjectWorkspaceReady,
 	createProjectWorkspaceDraft,
+	projectWorkflowPaths,
 	projectWorkspacePath,
 	resolveProjectDirectory,
 } from "../src/project-workspace.ts";
@@ -39,6 +40,13 @@ async function createTemplate(root: string): Promise<string> {
 describe("project workspace initialization", () => {
 	it("uses one local workspace path per project", () => {
 		expect(projectWorkspacePath("/projects/demo")).toBe("/projects/demo/.workflow/workspace");
+		expect(projectWorkflowPaths("/projects/demo")).toEqual({
+			config: "/projects/demo/workflow.config.yaml",
+			root: "/projects/demo/.workflow",
+			workspace: "/projects/demo/.workflow/workspace",
+			runtime: "/projects/demo/.workflow/runtime",
+			supervisor: "/projects/demo/.workflow/supervisor",
+		});
 	});
 
 	it("resolves an execution directory relative to the active project", async () => {
