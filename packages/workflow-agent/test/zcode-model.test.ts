@@ -103,4 +103,42 @@ describe("resolveZCodeModelSelector", () => {
 		expect(openCode).toMatchObject({ providerId: "opencode-go-chat", providerName: "OpenCode(Chat)" });
 		expect(commandCode).toMatchObject({ providerId: "new-provider", providerName: "CommandCode(Chat)" });
 	});
+
+	it("prefers an exact OCX public selector over a provider-local model id", () => {
+		const binding = resolveZCodeModelBinding(
+			{
+				config: {
+					providerConfigRules: {
+						providerRules: [
+							{ providerId: "opencode-go-chat", providerName: "OpenCode(Chat)" },
+							{ providerId: "ocx", providerName: "ocx" },
+						],
+					},
+					modelConfigRules: {
+						providerModelRules: [
+							{ providerId: "opencode-go-chat", modelId: "deepseek-v4.1-flash", config: { enabled: true } },
+							{
+								providerId: "ocx",
+								modelId: "opencode-go/deepseek-v4.1-flash",
+								config: { enabled: true },
+							},
+						],
+					},
+				},
+			},
+			{
+				requested: "opencode-go/deepseek-v4.1-flash",
+				selector: "opencode-go/deepseek-v4.1-flash",
+				kind: "model",
+				provider: "opencode-go",
+				modelId: "deepseek-v4.1-flash",
+			},
+		);
+		expect(binding).toEqual({
+			providerId: "ocx",
+			providerName: "ocx",
+			modelId: "opencode-go/deepseek-v4.1-flash",
+			selector: "ocx/opencode-go/deepseek-v4.1-flash",
+		});
+	});
 });

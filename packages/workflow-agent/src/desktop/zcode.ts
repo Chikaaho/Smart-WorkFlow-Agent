@@ -48,7 +48,8 @@ export class ZCodeDesktopAdapter implements DesktopHarnessAdapter {
 	}
 
 	async prepare(input: DispatchInput): Promise<PreparedDispatch> {
-		const model = await this.resolveModelBinding(input.model);
+		const binding = await this.resolveModelBinding(input.model);
+		const model = { ...binding, reasoningLevel: input.role === "executor" ? "high" : "medium" };
 		return await this.driver.prepare({ workspacePath: this.workspacePath, model });
 	}
 

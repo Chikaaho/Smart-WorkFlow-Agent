@@ -8,6 +8,8 @@ type UnknownRecord = Record<string, unknown>;
 
 export const ZCODE_FULL_CONTROL_MODE = "yolo";
 
+const ZCODE_REASONING_LEVEL_CANDIDATES = ["medium", "low", "enabled", "high", "max", "xhigh", "disabled", "none"];
+
 interface PendingRequest {
 	resolve(value: unknown): void;
 	reject(error: Error): void;
@@ -69,6 +71,13 @@ function markerLine(value: unknown, marker: string): string | undefined {
 	return undefined;
 }
 
+function isReasoningSelectionError(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		(error.message.startsWith("Reasoning effort ") || error.message.startsWith("Reasoning level is required for "))
+	);
+}
+
 export class ZCodeProtocolClient {
 	readonly options: ZCodeProtocolClientOptions;
 	#child?: ChildProcessWithoutNullStreams;
@@ -120,25 +129,40 @@ export class ZCodeProtocolClient {
 		sessionId = `sess_workflow_${randomUUID()}`,
 	): Promise<ZCodePreparedSession> {
 		await this.start();
-		const reasoningLevel = model.reasoningLevel ?? "max";
-		await this.request("session/create", {
-			sessionId,
-			workspace: {
-				workspacePath: this.options.workspacePath,
-				workspaceKey: this.options.workspacePath,
-			},
-			mode: ZCODE_FULL_CONTROL_MODE,
-			model: {
-				providerId: model.providerId,
-				modelId: model.modelId,
-				options: { reasoningLevel },
-			},
-			thoughtLevel: reasoningLevel,
-			persistence: "immediate",
-			titleGenerationEnabled: false,
-			...(this.options.toolAllowlist ? { toolAllowlist: this.options.toolAllowlist } : {}),
-		});
-		return { sessionId, workspacePath: this.options.workspacePath, model };
+		const reasoningLevels = model.reasoningLevel
+			? [model.reasoningLevel, ...ZCODE_REASONING_LEVEL_CANDIDATES.filter((level) => level !== model.reasoningLevel)]
+			: ZCODE_REASONING_LEVEL_CANDIDATES;
+		let lastError: unknown;
+		for (const reasoningLevel of reasoningLevels) {
+			try {
+				await this.request("session/create", {
+					sessionId,
+					workspace: {
+						workspacePath: this.options.workspacePath,
+						workspaceKey: this.options.workspacePath,
+					},
+					mode: ZCODE_FULL_CONTROL_MODE,
+					model: {
+						providerId: model.providerId,
+						modelId: model.modelId,
+						options: { reasoningLevel },
+					},
+					thoughtLevel: reasoningLevel,
+					persistence: "immediate",
+					titleGenerationEnabled: false,
+					...(this.options.toolAllowlist ? { toolAllowlist: this.options.toolAllowlist } : {}),
+				});
+				return {
+					sessionId,
+					workspacePath: this.options.workspacePath,
+					model: { ...model, reasoningLevel },
+				};
+			} catch (error) {
+				if (!isReasoningSelectionError(error)) throw error;
+				lastError = error;
+			}
+		}
+		throw lastError instanceof Error ? lastError : new Error("ZCode 没有可用的推理强度");
 	}
 
 	async resume(sessionId: string, model: ZCodeProtocolModel): Promise<ZCodePreparedSession> {
@@ -149,7 +173,7 @@ export class ZCodeProtocolClient {
 				workspacePath: this.options.workspacePath,
 				workspaceKey: this.options.workspacePath,
 			},
-			thoughtLevel: model.reasoningLevel ?? "max",
+			...(model.reasoningLevel ? { thoughtLevel: model.reasoningLevel } : {}),
 			...(this.options.toolAllowlist ? { toolAllowlist: this.options.toolAllowlist } : {}),
 		});
 		await this.request("session/setMode", {
@@ -303,7 +327,7 @@ export class ZCodeProtocolDriver implements ZCodeDesktopDriver {
 		const session = await this.client.prepare({
 			providerId: request.model.providerId,
 			modelId: request.model.modelId,
-			reasoningLevel: "max",
+			...(request.model.reasoningLevel ? { reasoningLevel: request.model.reasoningLevel } : {}),
 		});
 		this.#sessions.set(session.sessionId, session);
 		return { sessionId: session.sessionId };

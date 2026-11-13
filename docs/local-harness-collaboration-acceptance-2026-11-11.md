@@ -27,6 +27,17 @@ ZCode 路由先从 OCX 目录解析，再到 ZCode 自身 `provider_config.json`
 
 2026-11-12 使用示例配置只读回测：默认 Executor 解析为 `OpenCode(Chat) / opencode-go-chat/deepseek-v4.1-flash`，具名 `ui` 解析为 `CommandCode(Chat) / new-provider/deepseek/deepseek-v4.1-flash`；同次回读的 OCX 状态为 `running=true`、`healthy=true`。
 
+2026-11-13 使用统一 `ocx` provider 和 `http://localhost:10100/v1` 实测：
+
+- `gpt-6-luna` 完成 Planner 任务并生成 Executor 派单，OCX 日志回读 `openai / gpt-6-luna / 200`。
+- `opencode-go/deepseek-v4.1-flash` 完成 Executor 任务，OCX 日志回读 `opencode-go / deepseek-v4.1-flash / 200`。
+- `deepseek/deepseek-flash` 完成 Executor 任务，OCX 日志回读 `deepseek / deepseek-flash / 200`。
+- `command-code/deepseek-deepseek-v4.1-flash` 首次因本机 API Key 过期返回 `401 UNAUTHORIZED`；重新执行 `cmd login` 后复测为 `200`，结果正确。
+
+同日 ZCode app-server 复测了统一 provider：Planner 默认请求 `medium`，Luna 按 ZCode 注册表回退到 `enabled`；Executor 默认请求 `high`。Luna planning、OpenCode DeepSeek 和 DeepSeek 官方路由均完成临时文件读取，返回值正确。会话均为 `yolo`，没有出现逐项权限确认。
+
+Command Code 通过统一 OCX provider 的 ZCode Agent 会话仍返回 `400 payload-rejected`；禁用 Agent 工具后结果相同。相同模型通过标准 OCX Responses 请求并携带 `reasoning.effort=high` 时返回 `200`。当前阻塞点是 ZCode 生成的 Responses 请求体与 Command Code 转译路径不兼容，不能计为 ZCode Executor 通过。
+
 DeepSeek Harness 不复用这些 ZCode provider。其配置只接受 `deepseek-official/<model>`，通过 `session/selectModel` 绑定会话模型。适配器要求 Host 回读的 provider、model、reasoning effort 与派单一致，否则拒绝 Executor 回执。
 
 ## DeepSeek 浏览器配置
@@ -58,7 +69,7 @@ dsh plugin --profile desktop add --save-exact --ignore-scripts \
 ## 自动检查
 
 - `tsc -p packages/workflow-agent/tsconfig.build.json --noEmit`：通过。
-- 工作流包 7 个定向测试文件、23 个测试：通过。
+- 工作流包 12 个测试文件、52 个测试：通过。
 - 全仓 `npm run check` 已执行。工作流相关检查通过；TypeScript 在既有 `packages/ai/test` 模型目录用例处失败，包括 Fireworks 的 `nemotron-3-ultra-nvfp4` 类型漂移和 `deepseek-v4-flash` 已更名为 `deepseek-v4.1-flash`。本次没有修改这些测试或生成目录。
 
 ## 剩余门禁

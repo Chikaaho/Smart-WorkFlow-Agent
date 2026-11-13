@@ -161,6 +161,10 @@ executors:
 
 模型账号和密钥保存在 OCX 与 ZCode 中，`workflow.config.yaml` 只保存模型路由。
 
+也可以在 ZCode 中只配置一个统一的 `ocx` provider：Base URL 使用 `http://localhost:10100/v1`，API 格式选择 Responses，再加入 OCX 返回的完整公开 selector。Pi 会优先选择完整 selector，并按模型实际支持的推理档位创建会话。
+
+Executor 默认使用 `high` 推理档位，Planner 默认使用 `medium`；ZCode 不接受默认值时自动选择兼容档位。
+
 ### 3. 启动 ZCode 工作流
 
 ```bash

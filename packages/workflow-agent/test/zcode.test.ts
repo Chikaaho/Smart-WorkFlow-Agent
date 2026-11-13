@@ -15,9 +15,11 @@ const binding = {
 };
 
 class FakeDriver implements ZCodeDesktopDriver {
+	prepared?: Pick<ZCodeDesktopRequest, "workspacePath" | "model">;
 	request?: ZCodeDesktopRequest & { sessionId: string };
 
-	async prepare() {
+	async prepare(request: Pick<ZCodeDesktopRequest, "workspacePath" | "model">) {
+		this.prepared = request;
 		return { sessionId: "zcode-session-1" };
 	}
 
@@ -74,5 +76,25 @@ describe("ZCodeDesktopAdapter", () => {
 		await adapter.dispatch(input, prepared);
 		expect(driver.request?.requireBrowserEvidence).toBeUndefined();
 		expect(driver.request?.prompt).toContain("标记后的 JSON 必须是完整规划，不能换成状态摘要");
+		expect(driver.prepared?.model.reasoningLevel).toBe("medium");
+	});
+
+	it("uses high reasoning for Executor sessions", async () => {
+		const driver = new FakeDriver();
+		const adapter = new ZCodeDesktopAdapter({
+			workspacePath: "/workspace",
+			driver,
+			resolveModelBinding: async () => binding,
+		});
+		const input: DispatchInput = {
+			taskId: "task:execution",
+			role: "executor",
+			stage: "execution",
+			requirement: { id: "task", revision: 1, goal: "执行任务", acceptance: ["完成"] },
+			model: { requested: "executor", selector: "executor", kind: "model" },
+			prompt: "执行任务",
+		};
+		await adapter.prepare(input);
+		expect(driver.prepared?.model.reasoningLevel).toBe("high");
 	});
 });

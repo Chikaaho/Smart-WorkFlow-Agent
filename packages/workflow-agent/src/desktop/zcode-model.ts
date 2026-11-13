@@ -8,6 +8,7 @@ export interface ZCodeModelBinding {
 	providerName?: string;
 	modelId: string;
 	selector: string;
+	reasoningLevel?: string;
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -43,21 +44,22 @@ export function resolveZCodeModelBinding(value: unknown, route: ResolvedRoute): 
 		throw new Error("ZCode provider_config.json 缺少 providerModelRules");
 	}
 
-	const candidates = new Set<string>([route.selector]);
-	if (route.modelId) candidates.add(route.modelId);
-	if (route.provider && route.modelId) candidates.add(`${route.provider}/${route.modelId}`);
-	for (const item of rules.providerModelRules) {
-		if (!isRecord(item) || typeof item.providerId !== "string" || typeof item.modelId !== "string") continue;
-		if (!candidates.has(item.modelId)) continue;
-		const enabled = !isRecord(item.config) || item.config.enabled !== false;
-		if (!enabled) throw new Error(`ZCode 模型 ${item.providerId}/${item.modelId} 已禁用`);
-		const providerName = providerNameFor(value.config, item.providerId);
-		return {
-			providerId: item.providerId,
-			...(providerName ? { providerName } : {}),
-			modelId: item.modelId,
-			selector: `${item.providerId}/${item.modelId}`,
-		};
+	const candidates = [route.selector];
+	if (route.provider && route.modelId) candidates.push(`${route.provider}/${route.modelId}`);
+	if (route.modelId) candidates.push(route.modelId);
+	for (const candidate of new Set(candidates)) {
+		for (const item of rules.providerModelRules) {
+			if (!isRecord(item) || typeof item.providerId !== "string" || item.modelId !== candidate) continue;
+			const enabled = !isRecord(item.config) || item.config.enabled !== false;
+			if (!enabled) throw new Error(`ZCode 模型 ${item.providerId}/${item.modelId} 已禁用`);
+			const providerName = providerNameFor(value.config, item.providerId);
+			return {
+				providerId: item.providerId,
+				...(providerName ? { providerName } : {}),
+				modelId: candidate,
+				selector: `${item.providerId}/${candidate}`,
+			};
+		}
 	}
 	if (route.modelId) {
 		const provider = providerRules(value.config).find(
