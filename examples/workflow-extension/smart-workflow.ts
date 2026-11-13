@@ -26,6 +26,7 @@ import {
 	resolveChromeExecutable,
 	resolveDeepSeekInstallation,
 	resolveDeepSeekWorkflowRoutes,
+	resolveProjectDirectory,
 	resolveWorkflowRoutes,
 	resolveZCodeInstallation,
 	type DeepSeekInstallationPaths,
@@ -44,6 +45,11 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
 
 const extensionDirectory = dirname(fileURLToPath(import.meta.url));
+const projectDirectoryEntry = "smart-workflow-project-directory";
+
+interface ProjectDirectoryState {
+	projectRoot: string;
+}
 
 interface SetupInspection {
 	ready: boolean;
@@ -90,12 +96,13 @@ async function pathExists(path: string): Promise<boolean> {
 
 async function inspectSetup(
 	ctx: ExtensionContext,
+	projectRoot: string,
 	options: { projectWorkspaceRoot?: string; requireInitializedWorkspace?: boolean } = {},
 ): Promise<SetupInspection> {
-	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(ctx.cwd, "workflow.config.yaml");
-	const projectWorkspaceRoot = options.projectWorkspaceRoot ?? projectWorkspacePath(ctx.cwd);
+	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(projectRoot, "workflow.config.yaml");
+	const projectWorkspaceRoot = options.projectWorkspaceRoot ?? projectWorkspacePath(projectRoot);
 	const requireInitializedWorkspace = options.requireInitializedWorkspace ?? true;
-	const lines: string[] = [];
+	const lines: string[] = [`项目目录：${projectRoot}`];
 	let ready = true;
 	let config: WorkflowConfig | undefined;
 	let routes: ResolvedWorkflowRoutes | undefined;
@@ -235,6 +242,7 @@ async function inspectSetup(
 
 async function openHarness(
 	ctx: ExtensionContext,
+	projectRoot: string,
 	setup: SetupInspection,
 	options: { requireBrowserEvidence?: boolean } = {},
 ): Promise<OpenHarness> {
@@ -244,15 +252,15 @@ async function openHarness(
 	const readiness = new OcxReadinessGate();
 	const timeoutMs = harnessTimeoutMs();
 	const requireBrowserEvidence = options.requireBrowserEvidence ?? true;
-	const stateDir = process.env.SMART_WORKFLOW_SUPERVISOR_STATE_DIR ?? join(ctx.cwd, ".workflow", "supervisor");
+	const stateDir = process.env.SMART_WORKFLOW_SUPERVISOR_STATE_DIR ?? join(projectRoot, ".workflow", "supervisor");
 	const supervisor = new WorkspaceSupervisor({
 		runner: new PythonSupervisorEventRunner({
 			root: setup.projectWorkspaceRoot,
 			stateDir,
-			workspace: ctx.cwd,
+			workspace: projectRoot,
 			host: setup.config.harness,
 		}),
-		workspace: ctx.cwd,
+		workspace: projectRoot,
 		host: setup.config.harness,
 	});
 
@@ -263,12 +271,12 @@ async function openHarness(
 			executable: installation.agentExecutable,
 			builtinProviderConfig: installation.builtinProviderConfig,
 			personalProviderConfig: installation.personalProviderConfig,
-			workspacePath: ctx.cwd,
+			workspacePath: projectRoot,
 			browser: new ChromeCdpBrowser(),
 		});
 		return {
 			adapter: new ZCodeDesktopAdapter({
-				workspacePath: ctx.cwd,
+				workspacePath: projectRoot,
 				driver: new ZCodeProtocolDriver(client),
 				resolveModelBinding: async (route) =>
 					await readZCodeModelBinding(installation.personalProviderConfig, route),
@@ -296,7 +304,7 @@ async function openHarness(
 	});
 	return {
 		adapter: new DeepSeekDesktopAdapter({
-			workspacePath: ctx.cwd,
+			workspacePath: projectRoot,
 			driver: new DeepSeekProtocolDriver(client),
 			resolveModelBinding: async (route) => {
 				if (route.provider !== "deepseek-official" || !route.modelId) {
@@ -340,8 +348,8 @@ function initializationPrompt(projectRoot: string, workspacePath: string): strin
 	].join("\n");
 }
 
-async function initializeProject(ctx: ExtensionContext): Promise<void> {
-	const finalPath = projectWorkspacePath(ctx.cwd);
+async function initializeProject(ctx: ExtensionContext, projectRoot: string): Promise<void> {
+	const finalPath = projectWorkspacePath(projectRoot);
 	if (await pathExists(finalPath)) {
 		try {
 			await assertProjectWorkspaceReady(finalPath);
@@ -356,7 +364,7 @@ async function initializeProject(ctx: ExtensionContext): Promise<void> {
 
 	ctx.ui.setStatus("smart-workflow", "正在创建项目 Workspace");
 	const draft = await createProjectWorkspaceDraft({
-		projectRoot: ctx.cwd,
+		projectRoot,
 		materials,
 		templateSource: process.env.SMART_WORKFLOW_TEMPLATE,
 	});
@@ -364,12 +372,12 @@ async function initializeProject(ctx: ExtensionContext): Promise<void> {
 	let prepared: PreparedDispatch | undefined;
 	let finalized = false;
 	try {
-		const setup = await inspectSetup(ctx, {
+		const setup = await inspectSetup(ctx, projectRoot, {
 			projectWorkspaceRoot: draft.workspacePath,
 			requireInitializedWorkspace: false,
 		});
 		if (!setup.ready) throw new Error(setup.summary);
-		harness = await openHarness(ctx, setup, { requireBrowserEvidence: false });
+		harness = await openHarness(ctx, projectRoot, setup, { requireBrowserEvidence: false });
 		await harness.readiness.assertReady();
 		const taskId = `init:${randomUUID()}`;
 		const dispatch: DispatchInput = {
@@ -388,7 +396,7 @@ async function initializeProject(ctx: ExtensionContext): Promise<void> {
 				],
 			},
 			model: harness.routes.roles.executor,
-			prompt: initializationPrompt(ctx.cwd, draft.workspacePath),
+			prompt: initializationPrompt(projectRoot, draft.workspacePath),
 		};
 		ctx.ui.setStatus("smart-workflow", `${harness.label} · Executor 正在初始化 Workspace`);
 		prepared = await harness.adapter.prepare(dispatch);
@@ -473,16 +481,16 @@ async function collectPlan(
 	return undefined;
 }
 
-async function runWorkflow(ctx: ExtensionContext, requestedExecutor?: string): Promise<void> {
-	const setup = await inspectSetup(ctx);
+async function runWorkflow(ctx: ExtensionContext, projectRoot: string, requestedExecutor?: string): Promise<void> {
+	const setup = await inspectSetup(ctx, projectRoot);
 	if (!setup.ready) throw new Error(setup.summary);
-	const harness = await openHarness(ctx, setup);
+	const harness = await openHarness(ctx, projectRoot, setup);
 	const store = new WorkflowRuntimeStore(
-		process.env.SMART_WORKFLOW_RUNTIME_STATE_DIR ?? join(ctx.cwd, ".workflow", "runtime"),
+		process.env.SMART_WORKFLOW_RUNTIME_STATE_DIR ?? join(projectRoot, ".workflow", "runtime"),
 	);
 	let runtime: PersistentWorkflowRuntime | undefined;
 	try {
-		const active = await store.latestActive(ctx.cwd);
+		const active = await store.latestActive(projectRoot);
 		let runtimeId: string;
 		let goal: string;
 		let acceptance: string[];
@@ -501,7 +509,7 @@ async function runWorkflow(ctx: ExtensionContext, requestedExecutor?: string): P
 				if (!cancel) return;
 				const oldRuntime = await PersistentWorkflowRuntime.open({
 					id: active.id,
-					workspace: ctx.cwd,
+					workspace: projectRoot,
 					store,
 					routes: harness.routes,
 					adapter: harness.adapter,
@@ -541,7 +549,7 @@ async function runWorkflow(ctx: ExtensionContext, requestedExecutor?: string): P
 		}
 		runtime = await PersistentWorkflowRuntime.open({
 			id: runtimeId,
-			workspace: ctx.cwd,
+			workspace: projectRoot,
 			store,
 			routes: harness.routes,
 			adapter: harness.adapter,
@@ -586,21 +594,75 @@ async function runWorkflow(ctx: ExtensionContext, requestedExecutor?: string): P
 }
 
 export default function smartWorkflow(pi: ExtensionAPI) {
+	let activeProjectRoot: string | undefined;
+
+	function savedProjectRoot(ctx: ExtensionContext): string | undefined {
+		let saved: string | undefined;
+		for (const entry of ctx.sessionManager.getBranch()) {
+			if (entry.type !== "custom" || entry.customType !== projectDirectoryEntry) continue;
+			const state = entry.data as ProjectDirectoryState | undefined;
+			if (typeof state?.projectRoot === "string") saved = state.projectRoot;
+		}
+		return saved;
+	}
+
+	async function restoreProjectRoot(ctx: ExtensionContext): Promise<string> {
+		const saved = savedProjectRoot(ctx);
+		if (!saved) {
+			activeProjectRoot = ctx.cwd;
+			return activeProjectRoot;
+		}
+		try {
+			activeProjectRoot = await resolveProjectDirectory(ctx.cwd, saved);
+		} catch (error) {
+			activeProjectRoot = ctx.cwd;
+			if (ctx.hasUI) ctx.ui.notify(`已保存的项目目录不可用，恢复为启动目录\n${message(error)}`, "warning");
+		}
+		return activeProjectRoot;
+	}
+
+	async function selectProjectRoot(args: string, ctx: ExtensionContext): Promise<string | undefined> {
+		const current = activeProjectRoot ?? ctx.cwd;
+		const input = args.trim() || (await ctx.ui.editor("输入项目目录", current));
+		if (!input?.trim()) return undefined;
+		const projectRoot = await resolveProjectDirectory(current, input);
+		activeProjectRoot = projectRoot;
+		pi.appendEntry<ProjectDirectoryState>(projectDirectoryEntry, { projectRoot });
+		ctx.ui.notify(`项目目录已切换：${projectRoot}`, "info");
+		return projectRoot;
+	}
+
 	pi.on("session_start", async (_event, ctx) => {
+		const projectRoot = await restoreProjectRoot(ctx);
 		if (!ctx.hasUI) return;
 		try {
-			const setup = await inspectSetup(ctx);
+			const setup = await inspectSetup(ctx, projectRoot);
 			ctx.ui.notify(setup.ready ? `Smart-WorkFlow 已就绪\n${setup.summary}` : setup.summary, setup.ready ? "info" : "warning");
 		} catch (error) {
 			ctx.ui.notify(message(error), "error");
 		}
 	});
 
+	pi.on("session_tree", async (_event, ctx) => {
+		await restoreProjectRoot(ctx);
+	});
+
+	pi.registerCommand("project-dir", {
+		description: "查看或切换当前项目执行目录",
+		handler: async (args, ctx) => {
+			try {
+				await selectProjectRoot(args, ctx);
+			} catch (error) {
+				ctx.ui.notify(message(error), "error");
+			}
+		},
+	});
+
 	pi.registerCommand("workflow-setup", {
 		description: "检查 OCX、桌面 Harness、角色模型和项目 Workspace",
 		handler: async (_args, ctx) => {
 			try {
-				const setup = await inspectSetup(ctx);
+				const setup = await inspectSetup(ctx, activeProjectRoot ?? ctx.cwd);
 				ctx.ui.notify(setup.summary, setup.ready ? "info" : "warning");
 			} catch (error) {
 				ctx.ui.notify(message(error), "error");
@@ -609,10 +671,13 @@ export default function smartWorkflow(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("init", {
-		description: "根据项目材料创建并初始化本项目的 Workspace knowledge",
-		handler: async (_args, ctx) => {
+		description: "根据项目材料初始化当前目录或指定目录",
+		handler: async (args, ctx) => {
 			try {
-				await initializeProject(ctx);
+				const projectRoot = args.trim()
+					? await selectProjectRoot(args, ctx)
+					: (activeProjectRoot ?? ctx.cwd);
+				if (projectRoot) await initializeProject(ctx, projectRoot);
 			} catch (error) {
 				ctx.ui.notify(message(error), "error");
 				ctx.ui.setStatus("smart-workflow", undefined);
@@ -624,7 +689,7 @@ export default function smartWorkflow(pi: ExtensionAPI) {
 		description: "规划、执行、验收、提交并推送一个通用项目任务",
 		handler: async (args, ctx) => {
 			try {
-				await runWorkflow(ctx, args.trim() || undefined);
+				await runWorkflow(ctx, activeProjectRoot ?? ctx.cwd, args.trim() || undefined);
 			} catch (error) {
 				ctx.ui.notify(message(error), "error");
 				ctx.ui.setStatus("smart-workflow", undefined);

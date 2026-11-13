@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { access, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -36,6 +36,20 @@ async function pathExists(path: string): Promise<boolean> {
 
 export function projectWorkspacePath(projectRoot: string): string {
 	return join(projectRoot, ".workflow", "workspace");
+}
+
+export async function resolveProjectDirectory(currentProjectRoot: string, input: string): Promise<string> {
+	const value = input.trim();
+	if (!value) throw new Error("项目目录不能为空");
+	const candidate = resolve(currentProjectRoot, value);
+	let info: Awaited<ReturnType<typeof stat>>;
+	try {
+		info = await stat(candidate);
+	} catch (error) {
+		throw new Error(`项目目录不存在：${candidate}`, { cause: error });
+	}
+	if (!info.isDirectory()) throw new Error(`项目路径不是目录：${candidate}`);
+	return await realpath(candidate);
 }
 
 export async function assertProjectWorkspaceReady(workspacePath: string): Promise<void> {

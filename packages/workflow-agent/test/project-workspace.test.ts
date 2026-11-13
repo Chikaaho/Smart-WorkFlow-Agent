@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -8,6 +8,7 @@ import {
 	assertProjectWorkspaceReady,
 	createProjectWorkspaceDraft,
 	projectWorkspacePath,
+	resolveProjectDirectory,
 } from "../src/project-workspace.ts";
 
 const execFileAsync = promisify(execFile);
@@ -38,6 +39,20 @@ async function createTemplate(root: string): Promise<string> {
 describe("project workspace initialization", () => {
 	it("uses one local workspace path per project", () => {
 		expect(projectWorkspacePath("/projects/demo")).toBe("/projects/demo/.workflow/workspace");
+	});
+
+	it("resolves an execution directory relative to the active project", async () => {
+		const root = await mkdtemp(join(tmpdir(), "workflow-project-directory-"));
+		try {
+			const first = join(root, "first");
+			const second = join(root, "second");
+			await mkdir(first);
+			await mkdir(second);
+			await expect(resolveProjectDirectory(first, "../second")).resolves.toBe(await realpath(second));
+			await expect(resolveProjectDirectory(first, "../missing")).rejects.toThrow("项目目录不存在");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 
 	it("forks the template and finalizes initialized project knowledge", async () => {

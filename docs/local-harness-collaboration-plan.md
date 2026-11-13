@@ -8,7 +8,7 @@
 
 两款宿主的选模边界不同。ZCode 使用其自身模型配置中已经接入的 OCX 代理 provider，Pi 根据 `workflow.config.yaml` 选择或切换具体 provider/model，不依赖 ZCode 当前默认值。DeepSeek Harness 只使用自身的 DeepSeek provider，不读取或复用 ZCode 中的 OCX provider。
 
-1. 在项目目录启动 Pi。首次运行 `/init`，输入项目说明、材料路径或文档链接。入口从通用 Workspace `main` 创建 `<项目>/.workflow/workspace`，由 Executor 读取材料和项目代码，初始化 `project.md`、`knowledge/` 和 `memory/`。每个项目只有一个本地 Workspace；后续调度不读取外部治理工作树。
+1. Pi 默认把启动目录作为 `project-dir`；从其他目录启动时用 `/project-dir <path>` 切换，或直接运行 `/init <path>`。首次初始化时输入项目说明、材料路径或文档链接。入口从通用 Workspace `main` 创建 `<project-dir>/.workflow/workspace`，由 Executor 读取材料和项目代码，初始化 `project.md`、`knowledge/` 和 `memory/`。每个项目只有一个本地 Workspace；后续调度不读取外部治理工作树。
 2. 入口显示选定的桌面端、连接状态、浏览器是否可操作、三种角色的模型。用户可以查看 OCX 的全部目录、只看已启用项或选择组合。依赖和项目 Workspace 通过检查后，进入 Planner 会话。
 3. 用户与 Planner 讨论需求。Planner 展示范围、验收项、需要用户裁决的节点。用户确认当前版本后，入口记录这次确认以及在该范围内派发 Executor 的授权。确认前不发执行单。
 4. Planner 把下一项工作交给具名执行子代理，或使用默认 Executor。执行单写明操作对象、预期行为、完成条件及所需工具。Executor 在同一桌面宿主内读代码、修改、自验，按工作项返回行为证据。
@@ -108,7 +108,7 @@
 
 ## 八、新会话开工
 
-从本仓库打开此文档及配置示例。在目标项目启动 Pi，首次运行 `/init` 创建 `.workflow/workspace`，随后运行 `/workflow-setup` 和 `/workflow`。通用模板地址由入口内置；只有测试其他模板时才设置 `SMART_WORKFLOW_TEMPLATE`。
+从本仓库打开此文档及配置示例。在目标项目启动 Pi，或从任意目录启动后运行 `/project-dir <path>`。首次运行 `/init` 创建 `.workflow/workspace`，随后运行 `/workflow-setup` 和 `/workflow`。通用模板地址由入口内置；只有测试其他模板时才设置 `SMART_WORKFLOW_TEMPLATE`。
 
 可以把下面这段直接发给新会话：
 

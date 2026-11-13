@@ -97,6 +97,7 @@ export {
 	type GitCommandRunner,
 	type ProjectWorkspaceDraft,
 	projectWorkspacePath,
+	resolveProjectDirectory,
 } from "./project-workspace.ts";
 export {
 	formatWorkflowLimitReached,

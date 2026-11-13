@@ -29,7 +29,7 @@ ZCode 新建和恢复会话时使用 `yolo` 完全操控模式。DeepSeek 新建
 
 ## 已验证入口
 
-- `examples/workflow-extension/smart-workflow.ts`：`/init`、`/workflow-setup`、`/workflow [executor-name]`
+- `examples/workflow-extension/smart-workflow.ts`：`/project-dir [path]`、`/init [path]`、`/workflow-setup`、`/workflow [executor-name]`
 - `examples/workflow-extension/zcode-protocol-workflow.ts`：`/workflow-p1-zcode [executor-name]`
 - `examples/workflow-extension/deepseek-protocol-workflow.ts`：`/workflow-p3-deepseek [executor-name]`
 - `examples/workflow-extension/zcode-desktop-control.ts`：ZCode 模型选择器切换与回读探针
@@ -46,7 +46,7 @@ Windows 默认查找当前用户和 `Program Files` 下的标准安装目录。�
 - `SMART_WORKFLOW_DEEPSEEK_RESOURCES`
 - `SMART_WORKFLOW_HARNESS_TIMEOUT_MS`：通用 Pi 入口的单次 Harness 等待时间，默认 15 分钟。
 
-ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。新项目先运行 `/init`，再运行 `/workflow`；命令的可选参数是 `executors` 中的配置名，例如 `/workflow ui`。Planner 规划会自动加入 Workspace 状态同步和 Git 提交推送验收条件。
+ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。Pi 默认以启动目录作为项目目录；`/project-dir <path>` 可以切换目录，`/init <path>` 可以切换后直接初始化。新项目先运行 `/init`，再运行 `/workflow`；命令的可选参数是 `executors` 中的配置名，例如 `/workflow ui`。Planner 规划会自动加入 Workspace 状态同步和 Git 提交推送验收条件。
 
 ## 实机界面
 

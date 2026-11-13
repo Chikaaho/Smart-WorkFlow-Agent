@@ -9,7 +9,7 @@ Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。它为每�
 | [Smart-WorkFlow-Agent](https://github.com/Chikaaho/Smart-WorkFlow-Agent) | Pi 运行时、OCX 模型路由、ZCode / DeepSeek Harness 协议接入、工作流状态与本地运行记录 |
 | [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) | 通用 Workspace 模板；`main` 定义 Planner、Executor、Admin、Supervisor / Validator 的权限、事件和验收流程 |
 
-首次在项目中运行 `/init` 时，Pi 从通用 Workspace `main` 创建 `<项目>/.workflow/workspace`，让 Executor 根据用户提供的材料和项目代码初始化 `project.md`、`knowledge/` 和 `memory/`。此后该项目只使用自己的本地 Workspace；运行记录保存在 `<项目>/.workflow/runtime`。
+Pi 默认把启动目录作为 `project-dir`。首次运行 `/init` 时，它从通用 Workspace `main` 创建 `<project-dir>/.workflow/workspace`，让 Executor 根据用户提供的材料和项目代码初始化 `project.md`、`knowledge/` 和 `memory/`。此后该项目只使用自己的本地 Workspace；运行记录保存在 `<project-dir>/.workflow/runtime`。
 
 ## 开始前准备
 
@@ -179,6 +179,15 @@ Set-Location $env:TARGET_WORKSPACE
 /init
 ```
 
+也可以从任意目录启动 Pi，再切换项目目录：
+
+```text
+/project-dir /absolute/path/to/your-project
+/init
+```
+
+`/init /absolute/path/to/your-project` 可以一次完成目录切换并开始初始化。相对路径以当前 `project-dir` 为起点。选择结果保存在当前 Pi 会话中，后续 `/workflow-setup` 和 `/workflow` 都使用该目录。
+
 然后查看安装、账号、模型和项目 Workspace 状态：
 
 ```text
@@ -313,6 +322,7 @@ Set-Location $env:TARGET_WORKSPACE
 进入 Pi 后运行：
 
 ```text
+/project-dir C:\path\to\your-project
 /init
 /workflow-setup
 /workflow
@@ -397,15 +407,16 @@ Pi 返回的内容应包含：
 
 ## 一次任务会怎么运行
 
-1. Pi 启动后检查 OCX、Chrome、ZCode、DeepSeek Harness、`workflow.config.yaml`、三种角色模型和项目本地 Workspace。
-2. 新项目运行 `/init`，输入项目材料。Pi 从通用模板创建 `.workflow/workspace`，Executor 读取材料和项目代码并初始化项目知识。
-3. 运行 `/workflow`。如果存在未完成记录，先恢复或终止；否则输入新任务。
-4. Planner 读取项目 Workspace 中的事实，生成目标、验收条件、具名 Executor 和完整派单。你确认后才开始执行；修改任务会重新规划。
-5. Executor 在项目目录完成实现和验证，Workspace Supervisor 检查回执能否进入业务验收。
-6. Planner 独立读取工程和页面行为证据，逐项验收。退回意见自动成为下一次 Executor 派单。
-7. 每轮默认和最高上限为 60 次。额度用完后，Pi 汇报累计派单、Planner 结论和未通过项；选择继续后输入 1–60 的新增轮数。
-8. 验收通过前，Executor 按项目 Workspace 同步后续状态、验收回执和终态；产生仓库变更时提交本任务文件并推送当前远端分支。
-9. Planner 核对状态同步、提交、推送和工作树结果。全部通过后保存并显示 `accepted`；用户终止时保存 `cancelled`。
+1. Pi 把启动目录作为 `project-dir`。需要处理其他目录时运行 `/project-dir <path>`；也可以直接运行 `/init <path>`。
+2. Pi 检查该目录的 `workflow.config.yaml`、项目本地 Workspace，以及 OCX、Chrome、ZCode、DeepSeek Harness 和三种角色模型。
+3. 新项目运行 `/init`，输入项目材料。Pi 从通用模板创建 `.workflow/workspace`，Executor 读取材料和项目代码并初始化项目知识。
+4. 运行 `/workflow`。如果存在未完成记录，先恢复或终止；否则输入新任务。
+5. Planner 读取项目 Workspace 中的事实，生成目标、验收条件、具名 Executor 和完整派单。你确认后才开始执行；修改任务会重新规划。
+6. Executor 在项目目录完成实现和验证，Workspace Supervisor 检查回执能否进入业务验收。
+7. Planner 独立读取工程和页面行为证据，逐项验收。退回意见自动成为下一次 Executor 派单。
+8. 每轮默认和最高上限为 60 次。额度用完后，Pi 汇报累计派单、Planner 结论和未通过项；选择继续后输入 1–60 的新增轮数。
+9. 验收通过前，Executor 按项目 Workspace 同步后续状态、验收回执和终态；产生仓库变更时提交本任务文件并推送当前远端分支。
+10. Planner 核对状态同步、提交、推送和工作树结果。全部通过后保存并显示 `accepted`；用户终止时保存 `cancelled`。
 
 你可以随时切到浏览器或桌面应用查看过程，也可以暂停后接管。
 
@@ -470,6 +481,10 @@ macOS 用 `export`，Windows PowerShell 用 `$env:变量名 = "路径"` 设置�
 ```
 
 输入项目说明、已有文档路径或链接。成功后会生成 `<项目>/.workflow/workspace`。如果该目录已存在但初始化未完成，Pi 会拒绝覆盖；删除或迁移该目录后再重新初始化。
+
+### 从其他目录启动 Pi
+
+运行 `/project-dir <项目路径>` 切换 Smart-WorkFlow 的执行目录，再运行 `/init`、`/workflow-setup` 或 `/workflow`。也可以直接运行 `/init <项目路径>`。如果设置了 `SMART_WORKFLOW_CONFIG`、`SMART_WORKFLOW_RUNTIME_STATE_DIR` 或 `SMART_WORKFLOW_SUPERVISOR_STATE_DIR`，这些显式路径仍会覆盖项目目录下的默认位置；需要在多个项目间切换时建议不设置这些变量。
 
 ### 4173 端口被占用
 
