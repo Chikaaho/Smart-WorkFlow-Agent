@@ -47,6 +47,7 @@ import {
 } from "@earendil-works/pi-workflow-agent";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
+import { isWorkflowExitInput } from "./workflow-exit.ts";
 
 const extensionDirectory = dirname(fileURLToPath(import.meta.url));
 const projectDirectoryEntry = "smart-workflow-project-directory";
@@ -652,6 +653,17 @@ export default function smartWorkflow(pi: ExtensionAPI) {
 
 	pi.on("session_tree", async (_event, ctx) => {
 		await restoreProjectRoot(ctx);
+	});
+
+	pi.on("input", async (event, ctx) => {
+		if (!isWorkflowExitInput(event.text, event.source)) return;
+		ctx.shutdown();
+		return { action: "handled" };
+	});
+
+	pi.registerCommand("exit", {
+		description: "退出 sw-agent",
+		handler: async (_args, ctx) => ctx.shutdown(),
 	});
 
 	pi.registerCommand("project-dir", {

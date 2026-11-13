@@ -47,6 +47,8 @@ sw-agent
 
 当前目录就是 `project-dir`。源码仓移动后，可把 `SW_AGENT_HOME` 设置为新的仓库绝对路径；重新运行 `npm run install:local` 也会更新全局启动器。
 
+退出时输入 `/exit` 或 `exit`。`/quit`、`quit` 和空输入框下的 `Ctrl+D` 也可退出。
+
 后续 npm 包发布后可以直接安装：
 
 ```bash

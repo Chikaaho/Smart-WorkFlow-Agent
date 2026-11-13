@@ -26,3 +26,4 @@
 - A configured OCX proxy now starts automatically when `sw-agent` opens and the proxy is not already running.
 - OCX user configuration no longer stores unused dashboard URL and version metadata.
 - Project Workspace initialization now retries transient template clone failures and clears partial clones between attempts.
+- Smart-Workflow interactive mode now exits through `/exit`, `exit`, `/quit`, `quit`, or an empty-editor `Ctrl+D`.
