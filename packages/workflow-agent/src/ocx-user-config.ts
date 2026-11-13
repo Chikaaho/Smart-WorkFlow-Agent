@@ -123,7 +123,8 @@ async function waitForOcxReady(runner: OcxCommandRunner): Promise<OcxRuntimeStat
 		if (!(error instanceof OcxReadinessError) || error.code !== "not_running") throw error;
 	}
 	try {
-		await runner.run(["start"]);
+		if (runner.startIndependent) await runner.startIndependent();
+		else await runner.run(["start"]);
 	} catch (error) {
 		throw new OcxReadinessError("status_failed", "OCX 代理自动启动失败；请运行 ocx start 查看错误", {
 			cause: error,

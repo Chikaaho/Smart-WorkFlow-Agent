@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import type { ModelBinding, WorkflowConfig, WorkflowRole } from "./config.ts";
 
@@ -45,6 +45,7 @@ export interface OcxRuntimeStatus {
 
 export interface OcxCommandRunner {
 	run(args: readonly string[]): Promise<string>;
+	startIndependent?(): Promise<void>;
 }
 
 export interface RouteIssue {
@@ -249,6 +250,21 @@ export class OcxCli implements OcxCommandRunner {
 	async run(args: readonly string[]): Promise<string> {
 		const result = await execFileAsync(this.executable, [...args], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
 		return result.stdout;
+	}
+
+	async startIndependent(): Promise<void> {
+		await new Promise<void>((resolve, reject) => {
+			const child = spawn(this.executable, ["start"], {
+				detached: true,
+				stdio: "ignore",
+				windowsHide: true,
+			});
+			child.once("error", reject);
+			child.once("spawn", () => {
+				child.unref();
+				resolve();
+			});
+		});
 	}
 }
 

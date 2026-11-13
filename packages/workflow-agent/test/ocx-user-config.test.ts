@@ -118,7 +118,7 @@ describe("OCX user configuration", () => {
 		}
 	});
 
-	it("starts an installed OCX proxy before reading accounts", async () => {
+	it("starts an installed OCX proxy outside the Pi lifecycle before reading accounts", async () => {
 		const root = await mkdtemp(join(tmpdir(), "workflow-ocx-config-"));
 		const configPath = join(root, "smart-workflow.json");
 		let running = false;
@@ -127,12 +127,12 @@ describe("OCX user configuration", () => {
 			const integration = await ensureOcxUserConfig({
 				configPath,
 				runner: {
+					async startIndependent() {
+						calls.push(["start-independent"]);
+						running = true;
+					},
 					async run(args) {
 						calls.push([...args]);
-						if (args[0] === "start") {
-							running = true;
-							return "started";
-						}
 						if (args[0] === "status") {
 							return JSON.stringify({ proxy: { running, health: { ok: running } } });
 						}
@@ -149,7 +149,7 @@ describe("OCX user configuration", () => {
 				},
 			});
 			expect(integration.status).toMatchObject({ running: true, healthy: true });
-			expect(calls.slice(0, 3)).toEqual([["status", "--json"], ["start"], ["status", "--json"]]);
+			expect(calls.slice(0, 3)).toEqual([["status", "--json"], ["start-independent"], ["status", "--json"]]);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

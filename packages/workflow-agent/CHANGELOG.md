@@ -27,3 +27,7 @@
 - OCX user configuration no longer stores unused dashboard URL and version metadata.
 - Project Workspace initialization now retries transient template clone failures and clears partial clones between attempts.
 - Smart-Workflow interactive mode now exits through `/exit`, `exit`, `/quit`, `quit`, or an empty-editor `Ctrl+D`.
+
+### Fixed
+
+- OCX automatic startup now runs outside the Pi process lifecycle, so exiting `sw-agent` no longer terminates the shared OCX proxy.
