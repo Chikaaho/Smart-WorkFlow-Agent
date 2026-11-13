@@ -61,7 +61,34 @@ proxy.running = true
 proxy.health.ok = true
 ```
 
-OCX 没有启动时，Pi 不会把任务交给 ZCode 或 DeepSeek Harness。
+首次启动 Smart-WorkFlow 时，Pi 会检查 OCX。OCX 已登录、代理健康且至少有一个可用模型时，Pi 自动创建用户全局配置：
+
+- macOS / Linux：`~/.pi/agent/smart-workflow.json`
+- Windows：`%USERPROFILE%\.pi\agent\smart-workflow.json`
+
+配置保存 OCX CLI、代理地址、控制台地址、版本和 OCX 自身配置文件位置，不保存账号令牌。示例：
+
+```json
+{
+  "schemaVersion": 1,
+  "ocx": {
+    "executable": "ocx",
+    "baseUrl": "http://127.0.0.1:10100/v1",
+    "dashboardUrl": "http://localhost:10100/",
+    "version": "2.100.1"
+  }
+}
+```
+
+如果 OCX 尚未安装、登录或启动，Pi 会显示对应命令。处理完成后运行：
+
+```text
+/ocx-setup
+```
+
+OCX CLI 不在 `PATH` 中时，把可执行文件路径作为参数传入，例如 `/ocx-setup C:\tools\ocx.cmd`。Pi 会把该路径写入用户全局配置。
+
+OCX 用户配置就绪后，所有项目共用这份机器级连接信息。OCX 没有启动时，Pi 不会把任务交给 ZCode 或 DeepSeek Harness。
 
 ## 安装桌面应用
 
@@ -203,6 +230,7 @@ Set-Location C:\path\to\your-project
 然后查看安装、账号、模型和项目 Workspace 状态：
 
 ```text
+/ocx-setup
 /workflow-setup
 ```
 
@@ -343,6 +371,7 @@ Set-Location C:\path\to\your-project
 进入 Pi 后运行：
 
 ```text
+/ocx-setup
 /init
 /workflow-setup
 /workflow
@@ -428,7 +457,7 @@ Pi 返回的内容应包含：
 ## 一次任务会怎么运行
 
 1. Pi 把启动目录作为 `project-dir`。需要处理其他目录时运行 `/project-dir <path>`；也可以直接运行 `/init <path>`。
-2. Pi 检查该目录的 `workflow.config.yaml`、项目本地 Workspace，以及 OCX、Chrome、ZCode、DeepSeek Harness 和三种角色模型。
+2. Pi 读取用户全局 OCX 配置，再检查该目录的 `workflow.config.yaml`、项目本地 Workspace、Chrome、ZCode、DeepSeek Harness 和三种角色模型。全局配置不存在但 OCX 已就绪时会自动创建。
 3. 新项目运行 `/init`，输入项目材料。Pi 从通用模板创建 `.workflow/workspace`，Executor 读取材料和项目代码并初始化项目知识。
 4. 运行 `/workflow`。如果存在未完成记录，先恢复或终止；否则输入新任务。
 5. Planner 读取项目 Workspace 中的事实，生成目标、验收条件、具名 Executor 和完整派单。你确认后才开始执行；修改任务会重新规划。
@@ -457,6 +486,14 @@ ocx start
 ```
 
 确认 `proxy.running` 和 `proxy.health.ok` 都是 `true`。
+
+首次配置或更换 OCX CLI 后，再运行：
+
+```text
+/ocx-setup
+```
+
+Pi 会更新用户全局 `smart-workflow.json`。
 
 ### ZCode 找不到模型
 

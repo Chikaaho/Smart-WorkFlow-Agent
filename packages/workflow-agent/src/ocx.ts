@@ -25,11 +25,22 @@ export interface OcxCatalog {
 	combos: OcxCombo[];
 }
 
+export interface OcxAccount {
+	provider: string;
+	active: boolean;
+	paused: boolean;
+	needsReauth: boolean;
+	health?: string;
+}
+
 export interface OcxRuntimeStatus {
 	running: boolean;
 	healthy: boolean;
 	version?: string;
 	installMethod?: string;
+	baseUrl?: string;
+	dashboardUrl?: string;
+	configPath?: string;
 }
 
 export interface OcxCommandRunner {
@@ -60,7 +71,13 @@ export interface ResolvedWorkflowRoutes {
 
 export type WorkflowRouteResult = { ok: true; routes: ResolvedWorkflowRoutes } | { ok: false; issues: RouteIssue[] };
 
-export type OcxReadinessErrorCode = "not_installed" | "not_running" | "unhealthy" | "invalid_status" | "status_failed";
+export type OcxReadinessErrorCode =
+	| "not_installed"
+	| "not_running"
+	| "not_configured"
+	| "unhealthy"
+	| "invalid_status"
+	| "status_failed";
 
 export class OcxReadinessError extends Error {
 	readonly code: OcxReadinessErrorCode;
@@ -102,11 +119,20 @@ export function parseOcxRuntimeStatus(value: unknown): OcxRuntimeStatus {
 	}
 	const version = isRecord(value.versionSkew) ? readString(value.versionSkew, "cliVersion") : undefined;
 	const installMethod = isRecord(value.install) ? readString(value.install, "method") : undefined;
+	const dashboardUrl = isRecord(value.dashboard) ? readString(value.dashboard, "url") : undefined;
+	const configPath = isRecord(value.paths) ? readString(value.paths, "config") : undefined;
+	const hostname = isRecord(value.listen) ? readString(value.listen, "hostname") : undefined;
+	const port = isRecord(value.listen) && typeof value.listen.port === "number" ? value.listen.port : undefined;
+	const proxyHost = hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname;
+	const baseUrl = proxyHost && port ? `http://${proxyHost}:${port}/v1` : undefined;
 	return {
 		running: value.proxy.running,
 		healthy: health.ok,
 		...(version ? { version } : {}),
 		...(installMethod ? { installMethod } : {}),
+		...(baseUrl ? { baseUrl } : {}),
+		...(dashboardUrl ? { dashboardUrl } : {}),
+		...(configPath ? { configPath } : {}),
 	};
 }
 
@@ -183,6 +209,36 @@ export function parseOcxCombos(value: unknown): OcxCombo[] {
 	});
 }
 
+export function parseOcxAccounts(value: unknown): OcxAccount[] {
+	if (!isRecord(value) || !Array.isArray(value.accounts)) {
+		throw new Error("ocx account list --json 必须返回包含 accounts 数组的对象");
+	}
+	return value.accounts.map((entry, index) => {
+		if (!isRecord(entry)) throw new Error(`OCX 账号目录第 ${index + 1} 项不是对象`);
+		const provider = readString(entry, "provider");
+		if (!provider || typeof entry.active !== "boolean") {
+			throw new Error(`OCX 账号目录第 ${index + 1} 项缺少 provider 或 active`);
+		}
+		const health = readString(entry, "health");
+		return {
+			provider,
+			active: entry.active,
+			paused: entry.paused === true,
+			needsReauth: entry.needsReauth === true,
+			...(health ? { health } : {}),
+		};
+	});
+}
+
+export function isOcxAccountUsable(account: OcxAccount): boolean {
+	return (
+		account.active &&
+		!account.paused &&
+		!account.needsReauth &&
+		(!account.health || account.health.toLowerCase() === "healthy")
+	);
+}
+
 export class OcxCli implements OcxCommandRunner {
 	readonly executable: string;
 
@@ -205,6 +261,10 @@ export async function readOcxCatalog(runner: OcxCommandRunner = new OcxCli()): P
 		models: parseOcxModels(parseJson(modelsJson, "ocx models live --json")),
 		combos: parseOcxCombos(parseJson(combosJson, "ocx combo list --json")),
 	};
+}
+
+export async function readOcxAccounts(runner: OcxCommandRunner = new OcxCli()): Promise<OcxAccount[]> {
+	return parseOcxAccounts(parseJson(await runner.run(["account", "list", "--json"]), "ocx account list --json"));
 }
 
 export function resolveModelBinding(binding: ModelBinding, catalog: OcxCatalog, path: string): RouteResolution {

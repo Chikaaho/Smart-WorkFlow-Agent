@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { WorkflowConfig } from "../src/config.ts";
 import {
 	assertOcxReady,
+	isOcxAccountUsable,
+	parseOcxAccounts,
 	parseOcxCombos,
 	parseOcxModels,
 	resolveDeepSeekWorkflowRoutes,
@@ -58,6 +60,17 @@ describe("OCX catalog", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.routes.executors.ui).toMatchObject({ requested: "combo/ui", selector: "combo/ui", kind: "combo" });
+	});
+
+	it("accepts only active signed-in accounts", () => {
+		const accounts = parseOcxAccounts({
+			accounts: [
+				{ provider: "openai", active: true, health: "Healthy" },
+				{ provider: "command-code", active: true, needsReauth: true },
+				{ provider: "deepseek", active: false },
+			],
+		});
+		expect(accounts.filter(isOcxAccountUsable).map((account) => account.provider)).toEqual(["openai"]);
 	});
 
 	it("reports a missing combo without falling back", () => {

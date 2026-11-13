@@ -1,20 +1,23 @@
+import { join } from "node:path";
 import {
 	DeepSeekDesktopAdapter,
 	DeepSeekDesktopHostClient,
 	DeepSeekProtocolDriver,
+	OCX_USER_CONFIG_FILENAME,
 	OcxReadinessGate,
 	PersistentWorkflowRuntime,
 	PythonSupervisorEventRunner,
 	WorkflowRuntimeStore,
 	WorkspaceSupervisor,
 	assertProjectWorkspaceReady,
+	ensureOcxUserConfig,
 	projectWorkflowPaths,
 	projectWorkspacePath,
 	readWorkflowConfig,
 	resolveDeepSeekInstallation,
 	resolveDeepSeekWorkflowRoutes,
 } from "@earendil-works/pi-workflow-agent";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
 
 async function runP3(ctx: ExtensionContext, executorName?: string): Promise<void> {
@@ -36,7 +39,8 @@ async function runP3(ctx: ExtensionContext, executorName?: string): Promise<void
 	const route = executorName ? routeResult.routes.executors[executorName] : routeResult.routes.roles.executor;
 	if (!route?.provider || !route.modelId) throw new Error(`未配置 DeepSeek Executor：${executorName ?? "默认"}`);
 	const selectedModel = { provider: route.provider, model: route.modelId, reasoningEffort: "high" };
-	const readiness = new OcxReadinessGate();
+	const ocx = await ensureOcxUserConfig({ configPath: join(getAgentDir(), OCX_USER_CONFIG_FILENAME) });
+	const readiness = new OcxReadinessGate(ocx.runner);
 	await readiness.assertReady();
 	const installation = await resolveDeepSeekInstallation();
 	const stateDir = paths.supervisor;

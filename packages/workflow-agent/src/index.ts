@@ -60,6 +60,8 @@ export {
 } from "./desktop/zcode-protocol.ts";
 export {
 	assertOcxReady,
+	isOcxAccountUsable,
+	type OcxAccount,
 	type OcxCatalog,
 	OcxCli,
 	type OcxCombo,
@@ -69,6 +71,7 @@ export {
 	type OcxReadinessErrorCode,
 	OcxReadinessGate,
 	type OcxRuntimeStatus,
+	parseOcxAccounts,
 	parseOcxCombos,
 	parseOcxModels,
 	parseOcxRuntimeStatus,
@@ -76,12 +79,22 @@ export {
 	type ResolvedWorkflowRoutes,
 	type RouteIssue,
 	type RouteResolution,
+	readOcxAccounts,
 	readOcxCatalog,
 	resolveDeepSeekWorkflowRoutes,
 	resolveModelBinding,
 	resolveWorkflowRoutes,
 	type WorkflowRouteResult,
 } from "./ocx.ts";
+export {
+	ensureOcxUserConfig,
+	OCX_USER_CONFIG_FILENAME,
+	type OcxUserConfig,
+	type OcxUserIntegration,
+	parseOcxUserConfig,
+	readOcxUserConfig,
+	writeOcxUserConfig,
+} from "./ocx-user-config.ts";
 export {
 	GIT_DELIVERY_ACCEPTANCE,
 	parseWorkflowTaskPlan,

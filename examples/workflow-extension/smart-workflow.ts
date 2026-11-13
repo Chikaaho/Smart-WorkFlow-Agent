@@ -7,6 +7,7 @@ import {
 	DeepSeekDesktopAdapter,
 	DeepSeekDesktopHostClient,
 	DeepSeekProtocolDriver,
+	OCX_USER_CONFIG_FILENAME,
 	OcxReadinessGate,
 	PersistentWorkflowRuntime,
 	PythonSupervisorEventRunner,
@@ -15,13 +16,13 @@ import {
 	ZCodeDesktopAdapter,
 	ZCodeProtocolClient,
 	ZCodeProtocolDriver,
-	assertOcxReady,
 	assertProjectWorkspaceReady,
 	createProjectWorkspaceDraft,
+	ensureOcxUserConfig,
+	isOcxAccountUsable,
 	planWorkflowTask,
 	projectWorkflowPaths,
 	projectWorkspacePath,
-	readOcxCatalog,
 	readWorkflowConfig,
 	readZCodeModelBinding,
 	resolveChromeExecutable,
@@ -33,6 +34,8 @@ import {
 	type DeepSeekInstallationPaths,
 	type DispatchInput,
 	type DesktopHarnessAdapter,
+	type OcxCatalog,
+	type OcxUserIntegration,
 	type PreparedDispatch,
 	type ResolvedWorkflowRoutes,
 	type WorkflowConfig,
@@ -42,7 +45,7 @@ import {
 	type WorkflowTaskPlan,
 	type ZCodeInstallationPaths,
 } from "@earendil-works/pi-workflow-agent";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
 
 const extensionDirectory = dirname(fileURLToPath(import.meta.url));
@@ -59,6 +62,7 @@ interface SetupInspection {
 	config?: WorkflowConfig;
 	routes?: ResolvedWorkflowRoutes;
 	projectWorkspaceRoot: string;
+	ocx?: OcxUserIntegration;
 	zcodeInstallation?: ZCodeInstallationPaths;
 	deepSeekInstallation?: DeepSeekInstallationPaths;
 }
@@ -107,6 +111,7 @@ async function inspectSetup(
 	let ready = true;
 	let config: WorkflowConfig | undefined;
 	let routes: ResolvedWorkflowRoutes | undefined;
+	let ocx: OcxUserIntegration | undefined;
 	let zcodeInstallation: ZCodeInstallationPaths | undefined;
 	let deepSeekInstallation: DeepSeekInstallationPaths | undefined;
 
@@ -123,18 +128,20 @@ async function inspectSetup(
 		);
 	}
 
-	let catalog: Awaited<ReturnType<typeof readOcxCatalog>> | undefined;
+	let catalog: OcxCatalog | undefined;
 	try {
-		const status = await assertOcxReady();
-		catalog = await readOcxCatalog();
-		if (catalog.models.length === 0) throw new Error("OCX 没有可用模型，请先运行 ocx setup 并配置模型账号");
+		const ocxConfigPath = join(getAgentDir(), OCX_USER_CONFIG_FILENAME);
+		ocx = await ensureOcxUserConfig({ configPath: ocxConfigPath });
+		catalog = ocx.catalog;
 		lines.push(
-			`OCX：运行中${status.version ? ` ${status.version}` : ""} · ${catalog.models.length} 个模型 · ${catalog.combos.length} 个组合`,
+			`OCX：运行中${ocx.status.version ? ` ${ocx.status.version}` : ""} · ${catalog.models.length} 个模型 · ${catalog.combos.length} 个组合`,
 		);
+		lines.push(`OCX 账号：${ocx.accounts.filter(isOcxAccountUsable).length} 个可用`);
+		lines.push(`OCX 用户配置：${ocxConfigPath}${ocx.created ? " · 已创建" : ""}`);
 	} catch (error) {
 		ready = false;
 		lines.push(`OCX：未就绪 · ${message(error)}`);
-		lines.push("安装和配置：npm install -g @bitkyc08/opencodex@2.100.1 && ocx setup && ocx start");
+		lines.push("依次运行：npm install -g @bitkyc08/opencodex@2.100.1、ocx setup、ocx start，再执行 /ocx-setup");
 	}
 
 	const [chromeResult, zcodeResult, deepSeekResult] = await Promise.allSettled([
@@ -236,6 +243,7 @@ async function inspectSetup(
 		projectWorkspaceRoot,
 		...(config ? { config } : {}),
 		...(routes ? { routes } : {}),
+		...(ocx ? { ocx } : {}),
 		...(zcodeInstallation ? { zcodeInstallation } : {}),
 		...(deepSeekInstallation ? { deepSeekInstallation } : {}),
 	};
@@ -247,10 +255,10 @@ async function openHarness(
 	setup: SetupInspection,
 	options: { requireBrowserEvidence?: boolean } = {},
 ): Promise<OpenHarness> {
-	if (!setup.ready || !setup.config || !setup.routes) {
+	if (!setup.ready || !setup.config || !setup.routes || !setup.ocx) {
 		throw new Error(setup.summary);
 	}
-	const readiness = new OcxReadinessGate();
+	const readiness = new OcxReadinessGate(setup.ocx.runner);
 	const timeoutMs = harnessTimeoutMs();
 	const requireBrowserEvidence = options.requireBrowserEvidence ?? true;
 	const stateDir = projectWorkflowPaths(projectRoot).supervisor;
@@ -665,6 +673,37 @@ export default function smartWorkflow(pi: ExtensionAPI) {
 				ctx.ui.notify(setup.summary, setup.ready ? "info" : "warning");
 			} catch (error) {
 				ctx.ui.notify(message(error), "error");
+			}
+		},
+	});
+
+	pi.registerCommand("ocx-setup", {
+		description: "检查 OCX 并创建用户全局配置，可选参数为 OCX CLI 路径",
+		handler: async (args, ctx) => {
+			const configPath = join(getAgentDir(), OCX_USER_CONFIG_FILENAME);
+			try {
+				const executable = args.trim() || undefined;
+				const ocx = await ensureOcxUserConfig({ configPath, ...(executable ? { executable } : {}) });
+				ctx.ui.notify(
+					[
+						`OCX 用户配置：${configPath}${ocx.created ? " · 已创建" : " · 已就绪"}`,
+						`代理：${ocx.config.ocx.baseUrl}`,
+						`账号：${ocx.accounts.filter(isOcxAccountUsable).length} 个可用`,
+						`模型：${ocx.catalog.models.filter((model) => !model.disabled).length} 个可用`,
+					].join("\n"),
+					"info",
+				);
+			} catch (error) {
+				ctx.ui.notify(
+					[
+						message(error),
+						"1. npm install -g @bitkyc08/opencodex@2.100.1",
+						"2. ocx setup",
+						"3. ocx start",
+						"4. 回到 Pi 再运行 /ocx-setup",
+					].join("\n"),
+					"warning",
+				);
 			}
 		},
 	});

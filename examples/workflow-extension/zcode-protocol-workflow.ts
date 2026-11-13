@@ -1,5 +1,7 @@
+import { join } from "node:path";
 import {
 	ChromeCdpBrowser,
+	OCX_USER_CONFIG_FILENAME,
 	OcxReadinessGate,
 	PersistentWorkflowRuntime,
 	PythonSupervisorEventRunner,
@@ -9,15 +11,15 @@ import {
 	ZCodeProtocolClient,
 	ZCodeProtocolDriver,
 	assertProjectWorkspaceReady,
+	ensureOcxUserConfig,
 	projectWorkflowPaths,
 	projectWorkspacePath,
-	readOcxCatalog,
 	readWorkflowConfig,
 	readZCodeModelBinding,
 	resolveZCodeInstallation,
 	resolveWorkflowRoutes,
 } from "@earendil-works/pi-workflow-agent";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
 
 async function runP1(
@@ -35,9 +37,10 @@ async function runP1(
 	if (configResult.value.harness !== "zcode") {
 		throw new Error(`当前配置选择了 ${configResult.value.harness}，不能启动 ZCode 工作流`);
 	}
-	const readiness = new OcxReadinessGate();
+	const ocx = await ensureOcxUserConfig({ configPath: join(getAgentDir(), OCX_USER_CONFIG_FILENAME) });
+	const readiness = new OcxReadinessGate(ocx.runner);
 	await readiness.assertReady();
-	const routeResult = resolveWorkflowRoutes(configResult.value, await readOcxCatalog());
+	const routeResult = resolveWorkflowRoutes(configResult.value, ocx.catalog);
 	if (!routeResult.ok) {
 		throw new Error(routeResult.issues.map((issue) => `${issue.path}: ${issue.message}`).join("；"));
 	}
