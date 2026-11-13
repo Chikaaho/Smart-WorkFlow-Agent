@@ -20,7 +20,7 @@ Pi 只是执行器。项目配置、Workspace 和运行状态都由项目目录�
 | macOS 13+ 或 Windows 10/11 | 运行 Pi、OCX 和桌面 Harness |
 | Node.js `22.19.0+` | 运行项目 |
 | Google Chrome | 显示任务执行和验收页面 |
-| OCX `2.100.1` | 提供模型和路由；必须保持运行 |
+| OCX `2.100.1` | 提供模型和路由；完成一次账号配置后由 `sw-agent` 自动启动代理 |
 | ZCode Desktop 或 DeepSeek Harness Desktop | 实际执行任务 |
 | [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) | `/init` 自动读取的通用 Workspace 模板 |
 
@@ -35,24 +35,49 @@ Pi 只是执行器。项目配置、Workspace 和运行状态都由项目目录�
 git clone https://github.com/Chikaaho/Smart-WorkFlow-Agent.git
 cd Smart-WorkFlow-Agent
 npm ci --ignore-scripts
-npm --prefix packages/workflow-agent run build
+npm run install:local
+sw-agent --version
 ```
 
-仓库根目录提供两个启动入口：
+`install:local` 把 `sw-agent` 安装到 npm 的全局可执行目录。之后进入任意项目目录直接运行：
 
-- macOS / Linux：`smart-workflow.sh`
-- Windows PowerShell：`smart-workflow.ps1`
+```bash
+sw-agent
+```
 
-启动入口只加载 Pi 和 Smart-WorkFlow 扩展，当前终端所在目录仍是项目目录。
+当前目录就是 `project-dir`。源码仓移动后，可把 `SW_AGENT_HOME` 设置为新的仓库绝对路径；重新运行 `npm run install:local` 也会更新全局启动器。
+
+后续 npm 包发布后可以直接安装：
+
+```bash
+npm install -g @sw-agent/cli
+```
+
+安装后的命令同样是 `sw-agent`。npm 发布流程位于 [publish-sw-agent.yml](.github/workflows/publish-sw-agent.yml)，支持 `sw-agent-v*` 标签和手动试打包。
+
+发布前在 GitHub 仓库中配置 npm automation token：
+
+```text
+Settings -> Secrets and variables -> Actions -> NPM_TOKEN
+```
+
+确认 `npm/sw-agent/package.json` 中的版本后推送同版本标签，例如：
+
+```bash
+git tag sw-agent-v1.4.0
+git push origin sw-agent-v1.4.0
+```
+
+CI 验证安装包后发布 `@sw-agent/cli`。GitHub Actions 的手动入口默认只打包，不发布。
 
 安装并启动 OCX：
 
 ```bash
 npm install -g @bitkyc08/opencodex@2.100.1
 ocx setup
-ocx start
-ocx status --json
 ```
+
+首次配置完成后运行 `sw-agent`。Pi 会自动启动 OCX 代理；也可以用 `ocx status --json` 查看状态。
 
 看到下面两个值才算启动成功：
 
@@ -202,14 +227,14 @@ Executor 默认使用 `high` 推理档位，Planner 默认使用 `medium`；ZCod
 
 ```bash
 cd /absolute/path/to/your-project
-/absolute/path/to/Smart-WorkFlow-Agent/smart-workflow.sh
+sw-agent
 ```
 
 Windows PowerShell：
 
 ```powershell
 Set-Location C:\path\to\your-project
-& "C:\path\to\Smart-WorkFlow-Agent\smart-workflow.ps1"
+sw-agent
 ```
 
 首次进入项目先初始化本地 Workspace。Pi 会提示输入项目说明、材料路径或文档链接：
@@ -358,14 +383,14 @@ executors:
 
 ```bash
 cd /absolute/path/to/your-project
-/absolute/path/to/Smart-WorkFlow-Agent/smart-workflow.sh
+sw-agent
 ```
 
 Windows PowerShell：
 
 ```powershell
 Set-Location C:\path\to\your-project
-& "C:\path\to\Smart-WorkFlow-Agent\smart-workflow.ps1"
+sw-agent
 ```
 
 进入 Pi 后运行：
@@ -517,6 +542,7 @@ macOS 用 `export`，Windows PowerShell 用 `$env:变量名 = "路径"` 设置�
 
 | 变量 | 内容 |
 |---|---|
+| `SW_AGENT_HOME` | 本地源码安装的 Smart-WorkFlow-Agent 仓库路径；通常不需要设置 |
 | `SMART_WORKFLOW_CHROME_EXECUTABLE` | `chrome.exe` 或 macOS Chrome 可执行文件的完整路径 |
 | `SMART_WORKFLOW_ZCODE_RESOURCES` | ZCode 的 `resources` 目录 |
 | `SMART_WORKFLOW_ZCODE_PERSONAL_PROVIDER_CONFIG` | ZCode 的 `provider_config.json` 完整路径 |
@@ -558,6 +584,9 @@ npm --prefix packages/workflow-agent test
 npx tsc -p packages/workflow-agent/tsconfig.build.json --noEmit
 npx tsc -p examples/workflow-extension/tsconfig.json
 npm run check:pinned-deps
+npm --prefix npm/sw-agent run build
+npm --prefix npm/sw-agent run smoke
+npm run check:sw-agent-package
 ```
 
 完整设计和验收记录：

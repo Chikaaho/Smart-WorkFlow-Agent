@@ -119,4 +119,41 @@ describe("OCX user configuration", () => {
 			await rm(root, { recursive: true, force: true });
 		}
 	});
+
+	it("starts an installed OCX proxy before reading accounts", async () => {
+		const root = await mkdtemp(join(tmpdir(), "workflow-ocx-config-"));
+		const configPath = join(root, "smart-workflow.json");
+		let running = false;
+		const calls: string[][] = [];
+		try {
+			const integration = await ensureOcxUserConfig({
+				configPath,
+				runner: {
+					async run(args) {
+						calls.push([...args]);
+						if (args[0] === "start") {
+							running = true;
+							return "started";
+						}
+						if (args[0] === "status") {
+							return JSON.stringify({ proxy: { running, health: { ok: running } } });
+						}
+						if (args[0] === "account") {
+							return JSON.stringify({ accounts: [{ provider: "openai", active: true }] });
+						}
+						if (args[0] === "models") {
+							return JSON.stringify([
+								{ provider: "openai", id: "gpt-6-luna", namespaced: "gpt-6-luna", disabled: false },
+							]);
+						}
+						return JSON.stringify({ combos: [] });
+					},
+				},
+			});
+			expect(integration.status).toMatchObject({ running: true, healthy: true });
+			expect(calls.slice(0, 3)).toEqual([["status", "--json"], ["start"], ["status", "--json"]]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
 });

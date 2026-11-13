@@ -114,6 +114,31 @@ function configFromStatus(executable: string, status: OcxRuntimeStatus): OcxUser
 	};
 }
 
+async function waitForOcxReady(runner: OcxCommandRunner): Promise<OcxRuntimeStatus> {
+	try {
+		return await assertOcxReady(runner);
+	} catch (error) {
+		if (!(error instanceof OcxReadinessError) || error.code !== "not_running") throw error;
+	}
+	try {
+		await runner.run(["start"]);
+	} catch (error) {
+		throw new OcxReadinessError("status_failed", "OCX 代理自动启动失败；请运行 ocx start 查看错误", {
+			cause: error,
+		});
+	}
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 8; attempt++) {
+		try {
+			return await assertOcxReady(runner);
+		} catch (error) {
+			lastError = error;
+			await new Promise((resolve) => setTimeout(resolve, 250));
+		}
+	}
+	throw new OcxReadinessError("status_failed", "OCX 已执行启动命令，但代理仍未就绪", { cause: lastError });
+}
+
 export async function ensureOcxUserConfig(input: {
 	configPath: string;
 	executable?: string;
@@ -122,7 +147,7 @@ export async function ensureOcxUserConfig(input: {
 	const existing = await readOcxUserConfig(input.configPath);
 	const executable = input.executable?.trim() || existing?.ocx.executable || "ocx";
 	const runner = input.runner ?? new OcxCli(executable);
-	const status = await assertOcxReady(runner);
+	const status = await waitForOcxReady(runner);
 	const accounts = await readOcxAccounts(runner);
 	if (accounts.filter(isOcxAccountUsable).length === 0) {
 		throw new OcxReadinessError("not_configured", "OCX 没有可用账号；请先运行 ocx setup 完成登录或密钥配置");

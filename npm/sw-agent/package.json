@@ -1,0 +1,38 @@
+{
+	"name": "@sw-agent/cli",
+	"version": "1.4.0",
+	"description": "Project-local Pi workflow orchestration for ZCode and DeepSeek Harness",
+	"type": "module",
+	"bin": {
+		"sw-agent": "dist/cli.js"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"CHANGELOG.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "node build.mjs",
+		"smoke": "node smoke.mjs"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"dependencies": {
+		"@earendil-works/pi-coding-agent": "1.4.0"
+	},
+	"devDependencies": {
+		"esbuild": "0.28.2"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Chikaaho/Smart-WorkFlow-Agent.git",
+		"directory": "npm/sw-agent"
+	},
+	"license": "MIT"
+}
