@@ -1,4 +1,4 @@
-# ZCode 配置。使用时放在 Workspace 根目录，文件名为 workflow.config.yaml。
+# ZCode 配置。使用时放在项目根目录，文件名为 workflow.config.yaml。
 schemaVersion: 1
 # 只接桌面端。zcode 和 deepseek-harness 均指能操作可见浏览器的桌面宿主。
 harness: zcode
@@ -20,7 +20,7 @@ roles:
     model: opencode-go/deepseek-v4.1-flash
 
 # 可选。Planner 指定 ui 时改用 CommandCode(Chat)，省略执行人选时使用 roles.executor。
-# 通用 /workflow 入口会把 Workspace 状态同步、Git 提交和当前远端分支推送加入验收条件。
+# 通用 /workflow 入口会把项目 Workspace 状态同步、Git 提交和当前远端分支推送加入验收条件。
 executors:
   ui:
     model: command-code/deepseek-deepseek-v4.1-flash

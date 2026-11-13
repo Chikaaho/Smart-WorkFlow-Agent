@@ -16,7 +16,10 @@ import {
 	ZCodeProtocolClient,
 	ZCodeProtocolDriver,
 	assertOcxReady,
+	assertProjectWorkspaceReady,
+	createProjectWorkspaceDraft,
 	planWorkflowTask,
+	projectWorkspacePath,
 	readOcxCatalog,
 	readWorkflowConfig,
 	readZCodeModelBinding,
@@ -26,7 +29,9 @@ import {
 	resolveWorkflowRoutes,
 	resolveZCodeInstallation,
 	type DeepSeekInstallationPaths,
+	type DispatchInput,
 	type DesktopHarnessAdapter,
+	type PreparedDispatch,
 	type ResolvedWorkflowRoutes,
 	type WorkflowConfig,
 	type WorkflowProgressEvent,
@@ -46,7 +51,7 @@ interface SetupInspection {
 	configPath: string;
 	config?: WorkflowConfig;
 	routes?: ResolvedWorkflowRoutes;
-	governanceRoot?: string;
+	projectWorkspaceRoot: string;
 	zcodeInstallation?: ZCodeInstallationPaths;
 	deepSeekInstallation?: DeepSeekInstallationPaths;
 }
@@ -83,9 +88,13 @@ async function pathExists(path: string): Promise<boolean> {
 	}
 }
 
-async function inspectSetup(ctx: ExtensionContext): Promise<SetupInspection> {
+async function inspectSetup(
+	ctx: ExtensionContext,
+	options: { projectWorkspaceRoot?: string; requireInitializedWorkspace?: boolean } = {},
+): Promise<SetupInspection> {
 	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(ctx.cwd, "workflow.config.yaml");
-	const governanceRoot = process.env.SMART_WORKFLOW_GOVERNANCE_ROOT?.trim();
+	const projectWorkspaceRoot = options.projectWorkspaceRoot ?? projectWorkspacePath(ctx.cwd);
+	const requireInitializedWorkspace = options.requireInitializedWorkspace ?? true;
 	const lines: string[] = [];
 	let ready = true;
 	let config: WorkflowConfig | undefined;
@@ -158,14 +167,21 @@ async function inspectSetup(ctx: ExtensionContext): Promise<SetupInspection> {
 		if (config?.harness === "deepseek-harness") ready = false;
 	}
 
-	if (!governanceRoot) {
+	if (!(await pathExists(join(projectWorkspaceRoot, ".codex", "governance", "execution-supervisor.py")))) {
 		ready = false;
-		lines.push("治理：未设置 SMART_WORKFLOW_GOVERNANCE_ROOT");
-	} else if (!(await pathExists(join(governanceRoot, ".codex", "governance", "execution-supervisor.py")))) {
-		ready = false;
-		lines.push(`治理：${governanceRoot} 不是可用的 Workspace main 工作树`);
+		lines.push(`项目 Workspace：未初始化 · 运行 /init（目标目录：${projectWorkspaceRoot}）`);
 	} else {
-		lines.push(`治理：${governanceRoot}`);
+		let workspaceReady = true;
+		if (requireInitializedWorkspace) {
+			try {
+				await assertProjectWorkspaceReady(projectWorkspaceRoot);
+			} catch (error) {
+				ready = false;
+				workspaceReady = false;
+				lines.push(`项目 Workspace：未完成 · ${message(error)}`);
+			}
+		}
+		if (workspaceReady) lines.push(`项目 Workspace：${projectWorkspaceRoot}`);
 	}
 
 	if (config) {
@@ -206,27 +222,32 @@ async function inspectSetup(ctx: ExtensionContext): Promise<SetupInspection> {
 	}
 
 	return {
-		ready: ready && Boolean(config && routes && governanceRoot),
+		ready: ready && Boolean(config && routes),
 		summary: lines.join("\n"),
 		configPath,
+		projectWorkspaceRoot,
 		...(config ? { config } : {}),
 		...(routes ? { routes } : {}),
-		...(governanceRoot ? { governanceRoot } : {}),
 		...(zcodeInstallation ? { zcodeInstallation } : {}),
 		...(deepSeekInstallation ? { deepSeekInstallation } : {}),
 	};
 }
 
-async function openHarness(ctx: ExtensionContext, setup: SetupInspection): Promise<OpenHarness> {
-	if (!setup.ready || !setup.config || !setup.routes || !setup.governanceRoot) {
+async function openHarness(
+	ctx: ExtensionContext,
+	setup: SetupInspection,
+	options: { requireBrowserEvidence?: boolean } = {},
+): Promise<OpenHarness> {
+	if (!setup.ready || !setup.config || !setup.routes) {
 		throw new Error(setup.summary);
 	}
 	const readiness = new OcxReadinessGate();
 	const timeoutMs = harnessTimeoutMs();
+	const requireBrowserEvidence = options.requireBrowserEvidence ?? true;
 	const stateDir = process.env.SMART_WORKFLOW_SUPERVISOR_STATE_DIR ?? join(ctx.cwd, ".workflow", "supervisor");
 	const supervisor = new WorkspaceSupervisor({
 		runner: new PythonSupervisorEventRunner({
-			root: setup.governanceRoot,
+			root: setup.projectWorkspaceRoot,
 			stateDir,
 			workspace: ctx.cwd,
 			host: setup.config.harness,
@@ -251,7 +272,7 @@ async function openHarness(ctx: ExtensionContext, setup: SetupInspection): Promi
 				driver: new ZCodeProtocolDriver(client),
 				resolveModelBinding: async (route) =>
 					await readZCodeModelBinding(installation.personalProviderConfig, route),
-				requireBrowserEvidence: true,
+				requireBrowserEvidence,
 				timeoutMs,
 			}),
 			routes: setup.routes,
@@ -281,9 +302,9 @@ async function openHarness(ctx: ExtensionContext, setup: SetupInspection): Promi
 				if (route.provider !== "deepseek-official" || !route.modelId) {
 					throw new Error(`DeepSeek Harness 不接受模型 ${route.selector}`);
 				}
-				return { provider: route.provider, model: route.modelId, reasoningEffort: "high" };
+				return { provider: route.provider, model: route.modelId };
 			},
-			requiredToolPrefix: "mcp__chrome-devtools-mcp__",
+			...(requireBrowserEvidence ? { requiredToolPrefix: "mcp__chrome-devtools-mcp__" } : {}),
 			timeoutMs,
 		}),
 		routes: setup.routes,
@@ -292,6 +313,104 @@ async function openHarness(ctx: ExtensionContext, setup: SetupInspection): Promi
 		label: "DeepSeek Harness",
 		close: async () => await client.close(),
 	};
+}
+
+function initializationPrompt(projectRoot: string, workspacePath: string): string {
+	return [
+		"初始化本项目的 Workspace knowledge。",
+		`项目代码目录：${projectRoot}`,
+		`待初始化 Workspace：${workspacePath}`,
+		"",
+		"先完整阅读以下文件：",
+		`- ${join(workspacePath, "system.md")}`,
+		`- ${join(workspacePath, "roles", "executor.md")}`,
+		`- ${join(workspacePath, "project.example.md")}`,
+		`- ${join(workspacePath, "knowledge", "README.md")}`,
+		`- ${join(workspacePath, "knowledge", "project-materials.md")}`,
+		"",
+		"然后读取项目代码、README、现有文档和 Git 当前状态，完成：",
+		`1. 按 project.example.md 的结构写 ${join(workspacePath, "project.md")}。`,
+		`2. 按实际项目内容初始化 ${join(workspacePath, "knowledge")}，至少更新 current-status.md 和 architecture.md。`,
+		`3. 同步更新 ${join(workspacePath, "memory")} 中对应的 Planner 摘要。`,
+		"4. 保留 knowledge/project-materials.md 中的用户原始材料，不得改写或删除。",
+		"5. 只记录能从用户材料、项目文件或 Git 状态中确认的事实；无法确认的内容明确标为待确认。",
+		"6. 不修改项目代码，不提交，不推送。",
+		"",
+		"完成后说明更新了哪些 Workspace 文件，以及仍需用户确认的事项。",
+	].join("\n");
+}
+
+async function initializeProject(ctx: ExtensionContext): Promise<void> {
+	const finalPath = projectWorkspacePath(ctx.cwd);
+	if (await pathExists(finalPath)) {
+		try {
+			await assertProjectWorkspaceReady(finalPath);
+			ctx.ui.notify(`项目 Workspace 已初始化：${finalPath}`, "info");
+			return;
+		} catch (error) {
+			throw new Error(`项目 Workspace 已存在但未完成，拒绝覆盖：${finalPath}\n${message(error)}`);
+		}
+	}
+	const materials = await ctx.ui.editor("输入项目材料（可粘贴项目说明、文件或目录路径、文档链接）");
+	if (!materials?.trim()) return;
+
+	ctx.ui.setStatus("smart-workflow", "正在创建项目 Workspace");
+	const draft = await createProjectWorkspaceDraft({
+		projectRoot: ctx.cwd,
+		materials,
+		templateSource: process.env.SMART_WORKFLOW_TEMPLATE,
+	});
+	let harness: OpenHarness | undefined;
+	let prepared: PreparedDispatch | undefined;
+	let finalized = false;
+	try {
+		const setup = await inspectSetup(ctx, {
+			projectWorkspaceRoot: draft.workspacePath,
+			requireInitializedWorkspace: false,
+		});
+		if (!setup.ready) throw new Error(setup.summary);
+		harness = await openHarness(ctx, setup, { requireBrowserEvidence: false });
+		await harness.readiness.assertReady();
+		const taskId = `init:${randomUUID()}`;
+		const dispatch: DispatchInput = {
+			taskId,
+			role: "executor",
+			stage: "execution",
+			requirement: {
+				id: taskId,
+				revision: 1,
+				goal: "根据用户材料和项目现状初始化项目 Workspace knowledge",
+				acceptance: [
+					"project.md 已按项目事实完成",
+					"knowledge/current-status.md 与 knowledge/architecture.md 已完成项目化",
+					"memory 中的 Planner 摘要已同步",
+					"用户原始材料完整保留",
+				],
+			},
+			model: harness.routes.roles.executor,
+			prompt: initializationPrompt(ctx.cwd, draft.workspacePath),
+		};
+		ctx.ui.setStatus("smart-workflow", `${harness.label} · Executor 正在初始化 Workspace`);
+		prepared = await harness.adapter.prepare(dispatch);
+		const receipt = await harness.adapter.dispatch(dispatch, prepared);
+		await assertProjectWorkspaceReady(draft.workspacePath);
+		await draft.finalize();
+		finalized = true;
+		ctx.ui.notify(
+			[`项目 Workspace 已初始化：${draft.finalPath}`, `Executor 回执：${receipt.output}`].join("\n"),
+			"info",
+		);
+	} finally {
+		const cleanup: Promise<void>[] = [];
+		if (prepared && harness?.adapter.release) cleanup.push(harness.adapter.release(prepared));
+		if (harness) cleanup.push(harness.close());
+		await Promise.allSettled(cleanup);
+		try {
+			if (!finalized) await draft.discard();
+		} finally {
+			ctx.ui.setStatus("smart-workflow", undefined);
+		}
+	}
 }
 
 function formatPlan(plan: WorkflowTaskPlan): string {
@@ -478,13 +597,25 @@ export default function smartWorkflow(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("workflow-setup", {
-		description: "检查 OCX、桌面 Harness、角色模型和 Workspace 治理配置",
+		description: "检查 OCX、桌面 Harness、角色模型和项目 Workspace",
 		handler: async (_args, ctx) => {
 			try {
 				const setup = await inspectSetup(ctx);
 				ctx.ui.notify(setup.summary, setup.ready ? "info" : "warning");
 			} catch (error) {
 				ctx.ui.notify(message(error), "error");
+			}
+		},
+	});
+
+	pi.registerCommand("init", {
+		description: "根据项目材料创建并初始化本项目的 Workspace knowledge",
+		handler: async (_args, ctx) => {
+			try {
+				await initializeProject(ctx);
+			} catch (error) {
+				ctx.ui.notify(message(error), "error");
+				ctx.ui.setStatus("smart-workflow", undefined);
 			}
 		},
 	});

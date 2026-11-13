@@ -9,6 +9,8 @@ import {
 	ZCodeDesktopAdapter,
 	ZCodeProtocolClient,
 	ZCodeProtocolDriver,
+	assertProjectWorkspaceReady,
+	projectWorkspacePath,
 	readOcxCatalog,
 	readWorkflowConfig,
 	readZCodeModelBinding,
@@ -22,10 +24,8 @@ async function runP1(
 	ctx: ExtensionContext,
 	executorName?: string,
 ): Promise<void> {
-	const governanceRoot = process.env.SMART_WORKFLOW_GOVERNANCE_ROOT;
-	if (!governanceRoot) {
-		throw new Error("请先设置 SMART_WORKFLOW_GOVERNANCE_ROOT，指向 Workspace main 的治理副本");
-	}
+	const projectWorkspaceRoot = projectWorkspacePath(ctx.cwd);
+	await assertProjectWorkspaceReady(projectWorkspaceRoot);
 	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(ctx.cwd, "workflow.config.yaml");
 	const configResult = await readWorkflowConfig(configPath);
 	if (!configResult.ok) {
@@ -64,7 +64,7 @@ async function runP1(
 	});
 	const supervisor = new WorkspaceSupervisor({
 		runner: new PythonSupervisorEventRunner({
-			root: governanceRoot,
+			root: projectWorkspaceRoot,
 			stateDir,
 			workspace: ctx.cwd,
 			host: "zcode",

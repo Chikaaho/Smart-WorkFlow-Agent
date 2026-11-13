@@ -4,7 +4,7 @@ import { WorkflowStateError } from "./workflow.ts";
 
 export const GIT_DELIVERY_ACCEPTANCE =
 	"若任务产生仓库变更：本任务变更已按项目规范提交并推送到当前远端分支，回执包含提交、推送和工作树状态";
-export const WORKFLOW_STATE_SYNC_ACCEPTANCE = "项目要求的后续状态、验收回执和终态已按 Workspace main 规则同步";
+export const WORKFLOW_STATE_SYNC_ACCEPTANCE = "项目要求的后续状态、验收回执和终态已按项目 Workspace 规则同步";
 
 export interface WorkflowTaskPlan {
 	goal: string;
@@ -64,7 +64,7 @@ export function parseWorkflowTaskPlan(output: string): WorkflowTaskPlan {
 		),
 		executorPrompt: [
 			executorPrompt,
-			"按 Smart-WorkFlow-Agent-Workspace main 的规则同步本任务后续状态、验收回执和终态。",
+			"按当前项目 Workspace 的规则同步本任务后续状态、验收回执和终态。",
 			"Git 提交和推送属于本任务交付步骤。产生仓库变更时，按项目提交规范提交本任务文件并推送当前远端分支；回执写明提交、推送和工作树状态。",
 		].join("\n"),
 		...(executorName ? { executorName } : {}),

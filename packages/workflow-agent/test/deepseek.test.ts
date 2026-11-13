@@ -87,6 +87,7 @@ describe("DeepSeekDesktopAdapter", () => {
 
 	it("requires the complete plan JSON in the planning result marker", async () => {
 		const driver = new FakeDriver();
+		driver.selected = { ...binding, reasoningEffort: "medium" };
 		const adapter = new DeepSeekDesktopAdapter({
 			workspacePath: "/workspace",
 			driver,
@@ -95,6 +96,7 @@ describe("DeepSeekDesktopAdapter", () => {
 		});
 		const prepared = await adapter.prepare({ ...input, role: "planner", stage: "planning" });
 		await adapter.dispatch({ ...input, role: "planner", stage: "planning" }, prepared);
+		expect(driver.prepared?.reasoningEffort).toBe("medium");
 		expect(driver.request?.prompt).toContain("标记后的 JSON 必须是完整规划，不能换成状态摘要");
 	});
 });

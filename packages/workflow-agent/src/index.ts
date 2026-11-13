@@ -91,6 +91,14 @@ export {
 	type WorkflowTaskPlanningInput,
 } from "./planner.ts";
 export {
+	assertProjectWorkspaceReady,
+	createProjectWorkspaceDraft,
+	DEFAULT_PROJECT_WORKSPACE_TEMPLATE,
+	type GitCommandRunner,
+	type ProjectWorkspaceDraft,
+	projectWorkspacePath,
+} from "./project-workspace.ts";
+export {
 	formatWorkflowLimitReached,
 	MAX_WORKFLOW_ATTEMPTS,
 	PersistentWorkflowRuntime,

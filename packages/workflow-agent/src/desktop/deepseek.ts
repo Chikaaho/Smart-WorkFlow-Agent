@@ -54,13 +54,15 @@ export class DeepSeekDesktopAdapter implements DesktopHarnessAdapter {
 	}
 
 	async prepare(input: DispatchInput): Promise<PreparedDispatch> {
-		const model = await this.resolveModelBinding(input.model);
+		const binding = await this.resolveModelBinding(input.model);
+		const model = { ...binding, reasoningEffort: input.role === "executor" ? "high" : "medium" };
 		return await this.driver.prepare({ workspacePath: this.workspacePath, model });
 	}
 
 	async dispatch(input: DispatchInput, prepared: PreparedDispatch): Promise<ExecutorReceipt> {
 		const marker = `WORKFLOW_${input.taskId.replaceAll(/[^A-Za-z0-9_-]/gu, "_")}`;
-		const model = await this.resolveModelBinding(input.model);
+		const binding = await this.resolveModelBinding(input.model);
+		const model = { ...binding, reasoningEffort: input.role === "executor" ? "high" : "medium" };
 		const roleName = input.role === "planner" ? "规划验收（Planner）" : "执行（Executor）";
 		const completionInstruction =
 			input.stage === "planning"

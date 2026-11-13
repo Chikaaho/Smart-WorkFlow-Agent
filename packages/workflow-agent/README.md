@@ -7,12 +7,13 @@ Pi 的桌面 Harness 工作流核心。它提供：
 - 使用 `roles.planner` 模型独立读取行为证据、逐项验收，并把退回意见转成下一次 Executor 派单；
 - 将每次状态变化、Executor 回执和 Planner 结论写入 `WorkflowRuntimeStore`，重启时恢复运行记录；
 - Workspace Supervisor / Validator 事件桥接与本地运行记录；
+- 从通用 Workspace `main` 创建项目专属 `.workflow/workspace`，保存原始材料并校验 `project.md`、`knowledge/` 和 `memory/` 初始化结果；
 - ZCode app-server 协议适配，由 ZCode 选择浏览器动作，Pi 提供用户可见的 Chrome；
 - DeepSeek Desktop Host 协议适配，由 DeepSeek 会话调用 Chrome DevTools MCP 操作可见 Chromium。
 - macOS / Windows 的 Chrome、ZCode 和 DeepSeek Harness 安装目录发现，以及自定义路径覆盖。
 - 通用 Planner 任务规划、用户确认、未完成任务恢复、进度事件、状态同步与 Git 提交推送验收。
 
-角色权限、Supervisor / Validator 事件和业务验收流程读取自 [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) 的 `main` 分支。
+角色权限、Supervisor / Validator 事件和业务验收流程来自 [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) 的 `main` 模板。`/init` 将模板完整克隆到当前项目的 `.workflow/workspace`，创建本地 `project` 分支，并由 Executor 根据项目材料初始化知识。后续运行只读取该项目的本地 Workspace。
 
 Pi 在每次 Executor 和 Planner 派单前执行 `ocx status --json`。CLI 缺失、代理未运行或健康检查失败时，不会创建 Harness 会话。
 
@@ -28,7 +29,7 @@ ZCode 新建和恢复会话时使用 `yolo` 完全操控模式。DeepSeek 新建
 
 ## 已验证入口
 
-- `examples/workflow-extension/smart-workflow.ts`：`/workflow-setup`、`/workflow [executor-name]`
+- `examples/workflow-extension/smart-workflow.ts`：`/init`、`/workflow-setup`、`/workflow [executor-name]`
 - `examples/workflow-extension/zcode-protocol-workflow.ts`：`/workflow-p1-zcode [executor-name]`
 - `examples/workflow-extension/deepseek-protocol-workflow.ts`：`/workflow-p3-deepseek [executor-name]`
 - `examples/workflow-extension/zcode-desktop-control.ts`：ZCode 模型选择器切换与回读探针
@@ -45,7 +46,7 @@ Windows 默认查找当前用户和 `Program Files` 下的标准安装目录。�
 - `SMART_WORKFLOW_DEEPSEEK_RESOURCES`
 - `SMART_WORKFLOW_HARNESS_TIMEOUT_MS`：通用 Pi 入口的单次 Harness 等待时间，默认 15 分钟。
 
-ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。实际项目运行 `/workflow`；命令的可选参数是 `executors` 中的配置名，例如 `/workflow ui`。Planner 规划会自动加入 Workspace 状态同步和 Git 提交推送验收条件。
+ZCode 使用 `workflow.config.example.yaml`；DeepSeek Harness 使用 `workflow.deepseek.config.example.yaml`。新项目先运行 `/init`，再运行 `/workflow`；命令的可选参数是 `executors` 中的配置名，例如 `/workflow ui`。Planner 规划会自动加入 Workspace 状态同步和 Git 提交推送验收条件。
 
 ## 实机界面
 

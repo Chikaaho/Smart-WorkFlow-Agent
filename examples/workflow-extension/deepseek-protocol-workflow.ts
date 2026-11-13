@@ -8,6 +8,8 @@ import {
 	PythonSupervisorEventRunner,
 	WorkflowRuntimeStore,
 	WorkspaceSupervisor,
+	assertProjectWorkspaceReady,
+	projectWorkspacePath,
 	readWorkflowConfig,
 	resolveDeepSeekInstallation,
 	resolveDeepSeekWorkflowRoutes,
@@ -16,10 +18,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { promptForAdditionalWorkflowAttempts } from "./workflow-continuation.ts";
 
 async function runP3(ctx: ExtensionContext, executorName?: string): Promise<void> {
-	const governanceRoot = process.env.SMART_WORKFLOW_GOVERNANCE_ROOT;
-	if (!governanceRoot) {
-		throw new Error("请先设置 SMART_WORKFLOW_GOVERNANCE_ROOT，指向 Workspace main 的治理副本");
-	}
+	const projectWorkspaceRoot = projectWorkspacePath(ctx.cwd);
+	await assertProjectWorkspaceReady(projectWorkspaceRoot);
 	const configPath = process.env.SMART_WORKFLOW_CONFIG ?? join(ctx.cwd, "workflow.config.yaml");
 	const configResult = await readWorkflowConfig(configPath);
 	if (!configResult.ok) {
@@ -62,7 +62,7 @@ async function runP3(ctx: ExtensionContext, executorName?: string): Promise<void
 	});
 	const supervisor = new WorkspaceSupervisor({
 		runner: new PythonSupervisorEventRunner({
-			root: governanceRoot,
+			root: projectWorkspaceRoot,
 			stateDir,
 			workspace: ctx.cwd,
 			host: "deepseek-harness",

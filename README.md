@@ -1,15 +1,15 @@
 # Smart-WorkFlow-Agent
 
-Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。启动后检查 OCX、ZCode、DeepSeek Harness、Chrome、角色模型和 Workspace 治理；用户在 Pi 中提交任务，Planner 规划并确认后自动派给 Executor，在可见浏览器中执行、逐项验收、同步状态、提交并推送代码，直到通过或需要用户决策。
+Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。它为每个项目创建独立的本地 Workspace，使用 OCX 配置角色模型，再由 ZCode 或 DeepSeek Harness 完成规划、执行、验收、状态同步、提交和推送。
 
 项目由两部分组成：
 
 | 项目 | 内容 |
 |---|---|
 | [Smart-WorkFlow-Agent](https://github.com/Chikaaho/Smart-WorkFlow-Agent) | Pi 运行时、OCX 模型路由、ZCode / DeepSeek Harness 协议接入、工作流状态与本地运行记录 |
-| [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) | 规则协议；`main` 分支定义 Planner、Executor、Admin、Supervisor / Validator 的权限、事件和验收流程 |
+| [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) | 通用 Workspace 模板；`main` 定义 Planner、Executor、Admin、Supervisor / Validator 的权限、事件和验收流程 |
 
-运行时读取 Workspace `main` 的治理文件。需求确认后由 Executor 执行，Supervisor 检查治理终态，Planner 根据页面行为证据决定通过或生成下一次派单；状态保存在目标项目的 `.workflow/runtime` 中。
+首次在项目中运行 `/init` 时，Pi 从通用 Workspace `main` 创建 `<项目>/.workflow/workspace`，让 Executor 根据用户提供的材料和项目代码初始化 `project.md`、`knowledge/` 和 `memory/`。此后该项目只使用自己的本地 Workspace；运行记录保存在 `<项目>/.workflow/runtime`。
 
 ## 开始前准备
 
@@ -20,7 +20,7 @@ Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。启动后�
 | Google Chrome | 显示任务执行和验收页面 |
 | OCX `2.100.1` | 提供模型和路由；必须保持运行 |
 | ZCode Desktop 或 DeepSeek Harness Desktop | 实际执行任务 |
-| [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) | 提供规则协议、角色权限和验收流程 |
+| [Smart-WorkFlow-Agent-Workspace](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) | `/init` 自动读取的通用 Workspace 模板 |
 
 已验证的桌面版本：
 
@@ -31,17 +31,9 @@ Smart-WorkFlow-Agent 是基于 Pi 的本地桌面 Harness 调度器。启动后�
 
 ```bash
 git clone https://github.com/Chikaaho/Smart-WorkFlow-Agent.git
-git clone https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace.git
 cd Smart-WorkFlow-Agent
 npm ci --ignore-scripts
 npm --prefix packages/workflow-agent run build
-```
-
-治理目录必须使用 Workspace 的 `main` 工作树：
-
-```bash
-git -C ../Smart-WorkFlow-Agent-Workspace switch main
-git -C ../Smart-WorkFlow-Agent-Workspace pull --ff-only
 ```
 
 安装并启动 OCX：
@@ -92,14 +84,13 @@ OCX 没有启动时，Pi 不会把任务交给 ZCode 或 DeepSeek Harness。
 
 ## 设置本机路径
 
-把下面三个路径改成你自己的：
+把下面两个路径改成你自己的：
 
 macOS：
 
 ```bash
 export AGENT_REPO="/absolute/path/to/Smart-WorkFlow-Agent"
 export TARGET_WORKSPACE="/absolute/path/to/your-project"
-export SMART_WORKFLOW_GOVERNANCE_ROOT="/absolute/path/to/Smart-WorkFlow-Agent-Workspace"
 export SMART_WORKFLOW_CONFIG="$TARGET_WORKSPACE/workflow.config.yaml"
 ```
 
@@ -108,13 +99,14 @@ Windows PowerShell：
 ```powershell
 $env:AGENT_REPO = "C:\path\to\Smart-WorkFlow-Agent"
 $env:TARGET_WORKSPACE = "C:\path\to\your-project"
-$env:SMART_WORKFLOW_GOVERNANCE_ROOT = "C:\path\to\Smart-WorkFlow-Agent-Workspace"
 $env:SMART_WORKFLOW_CONFIG = "$env:TARGET_WORKSPACE\workflow.config.yaml"
 ```
 
 - `AGENT_REPO`：本仓库路径。
 - `TARGET_WORKSPACE`：要处理的项目路径。
-- `SMART_WORKFLOW_GOVERNANCE_ROOT`：[Workspace 规则协议](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main)的 `main` 工作树路径。
+- `SMART_WORKFLOW_CONFIG`：项目的角色模型配置。未设置时默认读取项目根目录的 `workflow.config.yaml`。
+
+`/init` 默认从 [Smart-WorkFlow-Agent-Workspace main](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/tree/main) 创建项目 Workspace。测试本地模板时可临时设置 `SMART_WORKFLOW_TEMPLATE` 为另一个 Git 仓库地址或本地 Git 目录。
 
 ## 使用 ZCode
 
@@ -181,7 +173,13 @@ Set-Location $env:TARGET_WORKSPACE
   --extension "$env:AGENT_REPO\examples\workflow-extension\smart-workflow.ts"
 ```
 
-进入 Pi 后先查看安装、账号、模型和治理状态：
+首次进入项目先初始化本地 Workspace。Pi 会提示输入项目说明、材料路径或文档链接：
+
+```text
+/init
+```
+
+然后查看安装、账号、模型和项目 Workspace 状态：
 
 ```text
 /workflow-setup
@@ -315,6 +313,7 @@ Set-Location $env:TARGET_WORKSPACE
 进入 Pi 后运行：
 
 ```text
+/init
 /workflow-setup
 /workflow
 ```
@@ -398,23 +397,23 @@ Pi 返回的内容应包含：
 
 ## 一次任务会怎么运行
 
-1. Pi 启动后检查 OCX、Chrome、ZCode、DeepSeek Harness、`workflow.config.yaml`、三种角色模型和 Workspace `main` 治理目录。
-2. 运行 `/workflow`。如果存在未完成记录，先恢复或终止；否则输入新任务。
-3. Planner 读取项目事实，生成目标、验收条件、具名 Executor 和完整派单。你确认后才开始执行；修改任务会重新规划。
-4. Executor 在项目目录完成实现和验证，Workspace Supervisor 检查回执能否进入业务验收。
-5. Planner 独立读取工程和页面行为证据，逐项验收。退回意见自动成为下一次 Executor 派单。
-6. 每轮默认和最高上限为 60 次。额度用完后，Pi 汇报累计派单、Planner 结论和未通过项；选择继续后输入 1–60 的新增轮数。
-7. 验收通过前，Executor 按 Workspace `main` 同步后续状态、验收回执和终态；产生仓库变更时提交本任务文件并推送当前远端分支。
-8. Planner 核对状态同步、提交、推送和工作树结果。全部通过后保存并显示 `accepted`；用户终止时保存 `cancelled`。
+1. Pi 启动后检查 OCX、Chrome、ZCode、DeepSeek Harness、`workflow.config.yaml`、三种角色模型和项目本地 Workspace。
+2. 新项目运行 `/init`，输入项目材料。Pi 从通用模板创建 `.workflow/workspace`，Executor 读取材料和项目代码并初始化项目知识。
+3. 运行 `/workflow`。如果存在未完成记录，先恢复或终止；否则输入新任务。
+4. Planner 读取项目 Workspace 中的事实，生成目标、验收条件、具名 Executor 和完整派单。你确认后才开始执行；修改任务会重新规划。
+5. Executor 在项目目录完成实现和验证，Workspace Supervisor 检查回执能否进入业务验收。
+6. Planner 独立读取工程和页面行为证据，逐项验收。退回意见自动成为下一次 Executor 派单。
+7. 每轮默认和最高上限为 60 次。额度用完后，Pi 汇报累计派单、Planner 结论和未通过项；选择继续后输入 1–60 的新增轮数。
+8. 验收通过前，Executor 按项目 Workspace 同步后续状态、验收回执和终态；产生仓库变更时提交本任务文件并推送当前远端分支。
+9. Planner 核对状态同步、提交、推送和工作树结果。全部通过后保存并显示 `accepted`；用户终止时保存 `cancelled`。
 
 你可以随时切到浏览器或桌面应用查看过程，也可以暂停后接管。
 
 ## 当前可用范围
 
 - macOS：ZCode 模型切换、DeepSeek 原生模型、可见浏览器、任务退回、暂停和恢复已完成实机验证。
-- 运行时：启动体检、通用任务规划确认、Executor / Planner 自动循环、轮次续跑、状态同步、Git 提交推送验收、未完成任务恢复和单写入锁已接入统一入口。
+- 运行时：`/init` 项目 Workspace 初始化、启动体检、通用任务规划确认、Executor / Planner 自动循环、轮次续跑、状态同步、Git 提交推送验收、未完成任务恢复和单写入锁已接入统一入口。
 - Windows：已实现 PowerShell 启动、Chrome/ZCode/DeepSeek Harness 默认安装目录发现和自定义目录覆盖；仍需在 Windows 实机完成同一套“筛选后翻页”验收。
-- DeepSeek Harness 独立接入 Workspace 规则仓库的初始化登记仍待完成。
 - `/workflow-p1-zcode` 和 `/workflow-p3-deepseek` 保留为固定验收示例；实际项目使用 `/workflow`。
 
 ## 常见问题
@@ -462,13 +461,15 @@ macOS 用 `export`，Windows PowerShell 用 `$env:变量名 = "路径"` 设置�
 
 确认两个浏览器插件已经安装，`cordis.patch.yml` 中存在 `insert` 配置，然后重启 DeepSeek Harness。
 
-### 找不到 Workspace 规则
+### 项目 Workspace 未初始化
 
-确认下面的环境变量指向规则仓库的 `main` 工作树：
+在目标项目中重新启动 Pi，然后运行：
 
-```bash
-echo "$SMART_WORKFLOW_GOVERNANCE_ROOT"
+```text
+/init
 ```
+
+输入项目说明、已有文档路径或链接。成功后会生成 `<项目>/.workflow/workspace`。如果该目录已存在但初始化未完成，Pi 会拒绝覆盖；删除或迁移该目录后再重新初始化。
 
 ### 4173 端口被占用
 
@@ -497,7 +498,7 @@ npm run check:pinned-deps
 ## 数据与隐私
 
 - 不要把模型账号、令牌或 API Key 写入 `workflow.config.yaml`。
-- `.workflow/` 是本机运行数据，不要提交。
+- `.workflow/` 保存项目本地 Workspace 和运行数据，不要加入项目代码仓提交。
 - README 中的桌面截图已经移除用户名、本机路径、项目名和会话内容。
 
 ## 上游项目

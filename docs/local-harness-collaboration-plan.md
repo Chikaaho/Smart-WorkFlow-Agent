@@ -1,6 +1,6 @@
 # 桌面 Harness 协同开发入口 · 实施与验收方案
 
-2026-11-11 建立方案，2026-11-12 完成通用入口。实现仓库为 `Smart-WorkFlow-Agent` 的 `main`，治理依据为 `Smart-WorkFlow-Agent-Workspace` 的 `main`。当前实现包括[通用 Pi 入口](../examples/workflow-extension/smart-workflow.ts)、[配置示例](../examples/workflow-extension/workflow.config.example.yaml)、OCX 与角色模型门禁、ZCode / DeepSeek Harness 适配、Planner / Executor 循环、可见浏览器验收、运行记录恢复、状态同步及 Git 提交推送验收。
+2026-11-11 建立方案，2026-11-12 完成通用入口。实现仓库为 `Smart-WorkFlow-Agent` 的 `main`，通用规则模板为 `Smart-WorkFlow-Agent-Workspace` 的 `main`。当前实现包括[通用 Pi 入口](../examples/workflow-extension/smart-workflow.ts)、项目 `/init`、[配置示例](../examples/workflow-extension/workflow.config.example.yaml)、OCX 与角色模型门禁、ZCode / DeepSeek Harness 适配、Planner / Executor 循环、可见浏览器验收、运行记录恢复、状态同步及 Git 提交推送验收。
 
 ## 一、用户操作与完成条件
 
@@ -8,20 +8,21 @@
 
 两款宿主的选模边界不同。ZCode 使用其自身模型配置中已经接入的 OCX 代理 provider，Pi 根据 `workflow.config.yaml` 选择或切换具体 provider/model，不依赖 ZCode 当前默认值。DeepSeek Harness 只使用自身的 DeepSeek provider，不读取或复用 ZCode 中的 OCX provider。
 
-1. 打开 Workspace。入口显示选定的桌面端、连接状态、浏览器是否可操作、三种角色的模型。用户可以查看 OCX 的全部目录、只看已启用项或选择组合。依赖准备和治理初始化通过后，进入 Planner 会话。
-2. 用户与 Planner 讨论需求。Planner 展示范围、验收项、需要用户裁决的节点。用户确认当前版本后，入口记录这次确认以及在该范围内派发 Executor 的授权。确认前不发执行单。
-3. Planner 把下一项工作交给具名执行子代理，或使用默认 Executor。执行单写明操作对象、预期行为、完成条件及所需工具。Executor 在同一桌面宿主内读代码、修改、自验，按工作项返回行为证据。
-4. 执行回合结束后，由 Workspace Supervisor 和 Validator 检查能否提交执行结果。Planner 收到有效回执，对照验收项决定通过、派下一项或退回某个缺口。**派发 → 执行 → 复核**持续到已确认的需求收尾。组合内部切换备用模型属于同一次模型请求，业务验收退回才产生修复派单。
-5. 用户可以随时补充、暂停、接管、继续或取消。补充默认归入当前需求。实质改变目标或授权范围时，Planner 展示改动，更新确认后处理受影响的工作。验收权可按授权委托 Planner，保留人工验收的项目在该节点向用户展示已验证项、待决项和原始证据。
-6. 界面分别显示功能是否通过和整个交付是否结束。对遵循 Workspace `main` 默认规则的新需求，依次执行评估、开发分支实施、验收同步、合入 `develop` 再合入 `main`、按用户确认的版本发布、发布后同步、结束。用户明确本次不发版时，按规则在验收同步后结束。开发工具的阶段与项目交付的七个阶段分别记录。[生命周期 §3.0](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/blob/19c941253291c3865535ddcd9f6806f69db9d3db/system.md)
+1. 在项目目录启动 Pi。首次运行 `/init`，输入项目说明、材料路径或文档链接。入口从通用 Workspace `main` 创建 `<项目>/.workflow/workspace`，由 Executor 读取材料和项目代码，初始化 `project.md`、`knowledge/` 和 `memory/`。每个项目只有一个本地 Workspace；后续调度不读取外部治理工作树。
+2. 入口显示选定的桌面端、连接状态、浏览器是否可操作、三种角色的模型。用户可以查看 OCX 的全部目录、只看已启用项或选择组合。依赖和项目 Workspace 通过检查后，进入 Planner 会话。
+3. 用户与 Planner 讨论需求。Planner 展示范围、验收项、需要用户裁决的节点。用户确认当前版本后，入口记录这次确认以及在该范围内派发 Executor 的授权。确认前不发执行单。
+4. Planner 把下一项工作交给具名执行子代理，或使用默认 Executor。执行单写明操作对象、预期行为、完成条件及所需工具。Executor 在同一桌面宿主内读代码、修改、自验，按工作项返回行为证据。
+5. 执行回合结束后，由 Workspace Supervisor 和 Validator 检查能否提交执行结果。Planner 收到有效回执，对照验收项决定通过、派下一项或退回某个缺口。**派发 → 执行 → 复核**持续到已确认的需求收尾。组合内部切换备用模型属于同一次模型请求，业务验收退回才产生修复派单。
+6. 用户可以随时补充、暂停、接管、继续或取消。补充默认归入当前需求。实质改变目标或授权范围时，Planner 展示改动，更新确认后处理受影响的工作。验收权可按授权委托 Planner，保留人工验收的项目在该节点向用户展示已验证项、待决项和原始证据。
+7. 界面分别显示功能是否通过和整个交付是否结束。对遵循项目 Workspace 规则的新需求，依次执行评估、开发分支实施、验收同步、合入 `develop` 再合入 `main`、按用户确认的版本发布、发布后同步、结束。用户明确本次不发版时，按规则在验收同步后结束。开发工具的阶段与项目交付的七个阶段分别记录。[生命周期 §3.0](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/blob/19c941253291c3865535ddcd9f6806f69db9d3db/system.md)
 
 **贯穿开发的示例。** 用户确认「审批列表选好部门后，翻到第二页仍按该部门筛选」。Planner 派 `ui` 执行，Executor 在用户可见的标签页操作并读回页码、筛选值和列表记录。第一页已通过、第二页混入其他部门时，Planner 仅派回翻页缺口。修复后在相同条件下复验，再按授权完成验收和同步。
 
-## 二、Workspace main 的复用与适配
+## 二、项目 Workspace 的创建与适配
 
 | 由谁负责 | 实现依据与边界 |
 |---|---|
-| Workspace | `system.md`、`roles/` 和目标项目的 `project.md` 决定授权、读写范围、工程仓库及验收规则。初始化先对实际宿主运行只读的 `python3 init/check.py --harness <已登记的宿主 ID>`。只有该宿主的状态可用于本次运行。新增宿主、角色委派来源或通用 Hook 时，由 Admin 按初始化规范维护并验证。[初始化](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/blob/19c941253291c3865535ddcd9f6806f69db9d3db/init/README.md) |
+| Workspace | `/init` 完整克隆通用模板 `main`，在项目的 `.workflow/workspace` 创建 `project` 分支，把模板远端保留为只读 `template`。Executor 保存用户原始材料，读取项目文件和 Git 状态后初始化 `project.md`、`knowledge/` 与 `memory/`。`system.md`、`roles/` 和本项目的 `project.md` 决定授权、读写范围、工程仓库及验收规则。[初始化](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/blob/19c941253291c3865535ddcd9f6806f69db9d3db/init/README.md) |
 | Planner | 负责方向、派单、第一层验收。按角色权限读取行为证据。需要代码事实时经 `search_task/ → Executor → search_fallback/`。L/XL 用 `product/` 下发方向并记录独立验收。[角色定义](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/blob/19c941253291c3865535ddcd9f6806f69db9d3db/roles/planner.md) |
 | Executor | 依据工程事实判级，按授权修改和验证，回传结果。功能通过后先更新 `knowledge/`，再按 Planner 的同步清单更新获授权摘要。任一子代理沿用 Executor 权限。[角色定义](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/blob/19c941253291c3865535ddcd9f6806f69db9d3db/roles/executor.md) |
 | Admin | 维护初始化、权限、Hook 和宿主适配配置。日常开发循环只需 Planner 和 Executor。管理员有独立模型和会话，不参与业务验收。[角色定义](https://github.com/Chikaaho/Smart-WorkFlow-Agent-Workspace/blob/19c941253291c3865535ddcd9f6806f69db9d3db/roles/admin.md) |
@@ -35,7 +36,7 @@
 
 ## 三、配置、模型目录与派单选模
 
-配置放在目标 Workspace 根目录的 `workflow.config.yaml`。完整字段见[示例 YAML](../examples/workflow-extension/workflow.config.example.yaml)。`combo/coding` 和 `combo/ui` 是示例名称，开发演练时替换成实际 OCX 实例中的组合。
+配置放在目标项目根目录的 `workflow.config.yaml`。完整字段见[示例 YAML](../examples/workflow-extension/workflow.config.example.yaml)。`combo/coding` 和 `combo/ui` 是示例名称，开发演练时替换成实际 OCX 实例中的组合。
 
 | 配置 | 解析和生效时机 |
 |---|---|
@@ -56,7 +57,7 @@
 |---|---|---|
 | `config.ts`、`ocx.ts` | 配置、宿主、实时模型与组合目录 | 生效的角色模型、具名执行配置、逐字段错误。仓库已有固定版本的 YAML 依赖；由使用它的包声明运行时依赖。[仓库清单](../package.json) |
 | `desktop/zcode.ts`、`desktop/deepseek.ts` | 桌面实例、Workspace、角色声明、模型、派单 | 创建或恢复准确会话，发送、订阅、回读、中断。返回宿主会话和浏览器标签页标识。ZCode 从 V4 会话和桌面 BrowserControl 入手，DeepSeek 从桌面 Host 连接层、子代理选模与浏览器 provider 入手。[桌面调研与上游接口](desktop-harness-model-capabilities-research.md) |
-| `workspace.ts` | 需求确认记录、角色绑定、宿主事件、工具与浏览器观察 | 定位 `main` 的规范和契约，调用已有 Supervisor 和 Validator，处理允许、拒绝和续行动作。使用对应角色可读的证据路径。 |
+| `project-workspace.ts`、`workspace.ts` | 项目材料、通用模板、需求确认记录、角色绑定、宿主事件、工具与浏览器观察 | 原子创建项目本地 Workspace，校验项目知识初始化结果；随后从本地 Workspace 调用 Supervisor 和 Validator，处理允许、拒绝和续行动作。 |
 | `workflow.ts`、`store.ts` | 用户控制、Planner 派单或裁决、执行回执 | 驱动确认、执行、复核与交接，保存发送记录、检查点和待决事项。可复用项目中持久任务、SQLite 与取消机制，封装实验性 API；一个 Workspace 同时只有一个有写权限的调度进程。[pi-durable](../packages/durable/README.md) |
 | 桌面交互与 Pi 扩展 | 项目选择、配置、需求输入、任务状态、人工控制 | 在桌面工作流中呈现模型选择、确认、状态、补充、暂停、接管与验收。优先使用桌面宿主已公开的交互入口，必要时由扩展提供本地控制面。后台的 OCX CLI 只负责管理查询。Pi 扩展可以复用命令与生命周期事件，外部桌面工具的拦截必须落在宿主或其受控工具边界。[扩展入口](../packages/coding-agent/docs/extensions.md) |
 
@@ -73,7 +74,7 @@
 | 验收通过 → 同步 / 交付结束 | 对应等级所需同步和本需求剩余交付动作 | L/XL 由 Planner 下发唯一状态清单，Executor 更新，Planner 复核。还有发布或同步动作时继续显示真实下一步。 |
 | 任一活动阶段 → 暂停、接管、取消或恢复 | 用户控制、会话断线、浏览器不可用 | 先封住新动作，报告在途操作。接管时释放本任务的写入与浏览器控制，恢复时重读当前页面、工作树与有效授权。保留用户已有窗口、标签页和服务。 |
 
-调度记录保存在 Workspace 本机数据目录（建议 `.workflow/runtime/`，忽略提交）。每份派单关联需求修订、稳定验收项、父单、角色、公开路由、宿主会话、执行尝试、回执与裁决。原始证据按任务保存，给 Planner 暴露允许的行为结果。项目事实仍由 Workspace 的 `product/`、`knowledge/`、`memory/` 等目录承载。
+调度记录保存在项目的 `.workflow/runtime/`。项目 Workspace 位于 `.workflow/workspace/`，其中 `product/`、`knowledge/`、`memory/` 承载项目事实。每份派单关联需求修订、稳定验收项、父单、角色、公开路由、宿主会话、执行尝试、回执与裁决。
 
 宿主事件沿用 `agent-coding-engine.supervisor-event.v1`。重复事件用既有身份和修订去重。续行须符合 `send_required`、决定类型及精确发送目标，投递后回读。断线时若不清楚上一次写入或发送是否成功，先查宿主历史和实际结果；无法确定时显示待核实，防止重复改动、提交或发布。非即时任务登记输入、输出、进度、截止条件、取消方式、退出状态和清理结果。
 
@@ -85,7 +86,7 @@
 
 | 阶段 | 交付内容 | 进入下一阶段的依据 |
 |---|---|---|
-| P0 · 桌面与治理可行性 | 从 Workspace `main` 准备隔离演练目录和一页有筛选、翻页的测试页面。分别确认已安装宿主如何定位精确会话、绑定执行模型、向可见标签页发送操作、读回结果并释放控制。核对实际宿主 ID、`init` 状态、角色绑定、工具前置拦截和 Supervisor 调用。 | 按宿主记录平台、版本、调用入口、实测结果、缺口和下一项。至少一个宿主能演示从执行会话点到第二页并读回内容，即可开展该宿主实现；另一个保留独立验收项。 |
+| P0 · 桌面与治理可行性 | 用 `/init` 从 Workspace `main` 创建项目本地实例和一页有筛选、翻页的测试页面。分别确认已安装宿主如何定位精确会话、绑定执行模型、向可见标签页发送操作、读回结果并释放控制。核对实际宿主 ID、项目知识、角色绑定、工具前置拦截和 Supervisor 调用。 | 按宿主记录平台、版本、调用入口、实测结果、缺口和下一项。至少一个宿主能演示从执行会话点到第二页并读回内容，即可开展该宿主实现；另一个保留独立验收项。 |
 | P1 · 最小纵向流程 | 实现配置与 OCX 目录、首个宿主适配、桌面确认入口、Planner 派单、Executor 回执、Supervisor 核验及 Planner 复核。先只开放 P0 已验证能事前约束的动作，串行完成一个需求。 | 在正常桌面入口，确认前无执行，确认后能指定子代理组合、完成真实页面操作并返回验收结果。 |
 | P2 · 退回与人工控制 | 加入按项退回、稳定验收项、授权与角色门禁、持久记录、暂停、接管、取消、断线恢复和终态同步。 | 经历一次真实退回和修复，已通过项保留；拒绝越权操作；在途暂停、重复事件和重启均不重复产生工程副作用。 |
 | P3 · 第二宿主与交付 | 用相同接口完成另一桌面宿主，接入能力检查和初始化指引。用实际包或扩展加载路径演练从安装、配置到验收，补齐用户使用说明。 | 两款宿主分别通过下表核心场景，列明可用平台和版本。用户从新 Workspace 只选其中一款，即可完成同一需求。 |
@@ -107,7 +108,7 @@
 
 ## 八、新会话开工
 
-从本仓库打开此文档及配置示例。本机的 Workspace 仓库在 `/usr/local/projects/Smart-WorkFlow`，当前工作树不一定检出 `main`。例如用 `git -C /usr/local/projects/Smart-WorkFlow show origin/main:system.md` 读取通用规则。用独立临时目录准备演练实例，已有业务工作树可继续使用原分支。
+从本仓库打开此文档及配置示例。在目标项目启动 Pi，首次运行 `/init` 创建 `.workflow/workspace`，随后运行 `/workflow-setup` 和 `/workflow`。通用模板地址由入口内置；只有测试其他模板时才设置 `SMART_WORKFLOW_TEMPLATE`。
 
 可以把下面这段直接发给新会话：
 

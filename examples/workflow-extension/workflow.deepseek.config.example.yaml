@@ -1,4 +1,4 @@
-# DeepSeek Harness 配置。使用时复制为 Workspace 根目录的 workflow.config.yaml。
+# DeepSeek Harness 配置。使用时复制为项目根目录的 workflow.config.yaml。
 schemaVersion: 1
 harness: deepseek-harness
 modelGateway:
@@ -17,6 +17,6 @@ roles:
     model: deepseek-official/deepseek-flash
 
 executors:
-  # 通用 /workflow 入口会把 Workspace 状态同步、Git 提交和当前远端分支推送加入验收条件。
+  # 通用 /workflow 入口会把项目 Workspace 状态同步、Git 提交和当前远端分支推送加入验收条件。
   ui:
     model: deepseek-official/deepseek-flash
